@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Array — Visualization</title>
+  <link rel="stylesheet" href="../css/common.css">
+  <style>
+    .viz { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; min-height: 100px; padding: 1rem; background: #24283b; border-radius: 12px; }
+    .cell { width: 52px; height: 44px; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; background: #414868; border-radius: 8px; border: 2px solid #565f89; font-weight: 700; color: #7dcfff; transition: all 0.2s; }
+    .cell .idx { font-size: 0.7rem; color: #565f89; }
+    .cell.current { border-color: #7dcfff; box-shadow: 0 0 14px rgba(125,207,255,0.6); background: #364a7c; }
+    .cell.empty { border-style: dashed; color: #565f89; }
+  </style>
+</head>
+<body>
+  <h1>Array</h1>
+  <p class="subtitle">Step-by-step: current index highlighted and pseudocode shown for each step.</p>
+  <div class="controls">
+    <input type="text" id="val" placeholder="Value" style="width:80px">
+    <input type="number" id="idx" placeholder="Index" min="0" style="width:70px">
+    <button onclick="get()">Get</button>
+    <button onclick="set()">Set</button>
+    <button onclick="insertAt()">Insert at index</button>
+    <button onclick="deleteAt()">Delete at index</button>
+    <button class="danger" id="btnClear" onclick="clearArr()">Clear</button>
+  </div>
+  <div class="controls">
+    <span style="color:#565f89">Random size:</span>
+    <input type="number" id="rndSize" min="1" max="20" value="8" style="width:60px">
+    <button onclick="randomArr()">Generate</button>
+  </div>
+  <div class="controls playback-row">
+    <span class="playback-label">Playback:</span>
+    <label><input type="radio" name="playback" id="modeAutoplay" checked> Autoplay</label>
+    <label><input type="radio" name="playback" id="modeStep"> Step by step</label>
+    <button type="button" id="btnNextStep" disabled>Next step</button>
+  </div>
+  <div id="log">Operations and pseudocode appear here.</div>
+  <div class="viz" id="viz"></div>
+
+  <script src="../js/common-viz.js"></script>
+  <script>
+    (function () {
+      var arr = [];
+      var animating = false;
+      function setBtns(on) {
+        animating = !on;
+        document.querySelectorAll('.controls button:not(#btnClear):not(#btnNextStep)').forEach(function (b) { b.disabled = !on; });
+        var nb = document.getElementById('btnNextStep');
+        if (nb) nb.disabled = on || window.VizCommon.getAutoplay();
+      }
+      function render(highlightIndex) {
+        if (highlightIndex === undefined) highlightIndex = -1;
+        var v = document.getElementById('viz');
+        v.innerHTML = '';
+        v.appendChild(Object.assign(document.createElement('span'), { className: 'label', textContent: 'arr' }));
+        for (var i = 0; i < arr.length; i++) {
+          var c = document.createElement('div');
+          c.className = 'cell' + (highlightIndex === i ? ' current' : '');
+          c.dataset.index = i;
+          c.innerHTML = '<span class="idx">' + i + '</span>' + (arr[i] !== undefined && arr[i] !== '' ? arr[i] : '—');
+          v.appendChild(c);
+        }
+        if (arr.length === 0) {
+          var span = document.createElement('span');
+          span.appendChild(document.createTextNode('(empty)'));
+          v.appendChild(span);
+        }
+      }
+      function showPseudo(lines, active, msg) {
+        window.VizCommon.showPseudo(lines, active, msg);
+      }
+      function step() {
+        return window.VizCommon.step();
+      }
+      window.VizCommon.setupPlayback(900, function () { return animating; }, setBtns);
+
+      var P_GET = [
+      '// Get by index — O(1)',
+      'if index < 0 or index >= length: error',
+      'return arr[index]'
+    ];
+      async function get() {
+      const i = parseInt(document.getElementById('idx').value, 10);
+      if (isNaN(i) || i < 0) { showPseudo([], -1, 'Enter valid index.'); return; }
+      setBtns(false);
+      showPseudo(P_GET, 0, 'Get arr[' + i + ']. Direct access by index.'); render(i);
+      await step();
+      showPseudo(P_GET, 1, 'index in range? ' + (i >= arr.length ? 'No — out of range!' : 'Yes.'));
+      await step();
+      if (i >= arr.length) showPseudo(P_GET, 1, 'Index out of range.');
+      else showPseudo(P_GET, 2, 'return arr[' + i + '] = ' + arr[i]);
+      setBtns(true);
+      }
+      var P_SET = [
+      '// Set by index — O(1)',
+      'if index < 0: error',
+      'if index >= length: grow array (or error)',
+      'arr[index] = value'
+    ];
+      async function set() {
+      const i = parseInt(document.getElementById('idx').value, 10);
+      const val = document.getElementById('val').value.trim();
+      if (isNaN(i) || i < 0) { showPseudo([], -1, 'Enter valid index.'); return; }
+      setBtns(false);
+      showPseudo(P_SET, 0, 'Set arr[' + i + '] = ' + (val || '""') + '.'); render(i);
+      await step();
+      showPseudo(P_SET, 1, 'index >= 0? Yes.'); await step();
+      showPseudo(P_SET, 2, 'index >= length? ' + (i >= arr.length ? 'Yes — extend array.' : 'No.'));
+      await step();
+      if (i >= arr.length) { while (arr.length < i) arr.push(undefined); arr.push(val === '' ? undefined : (isNaN(Number(val)) ? val : Number(val))); }
+      else arr[i] = val === '' ? undefined : (isNaN(Number(val)) ? val : Number(val));
+      showPseudo(P_SET, 3, 'arr[' + i + '] = value. Done.'); render(i);
+      setBtns(true);
+      }
+      var P_INSERT = [
+      '// Insert at index — O(n) shift',
+      'for j = length-1 down to index:',
+      '  arr[j+1] = arr[j]   // shift right',
+      'arr[index] = value',
+      'length = length + 1'
+    ];
+      async function insertAt() {
+      const i = parseInt(document.getElementById('idx').value, 10);
+      const val = document.getElementById('val').value.trim();
+      if (isNaN(i) || i < 0 || !val) { showPseudo([], -1, 'Enter index and value.'); return; }
+      const v = isNaN(Number(val)) ? val : Number(val);
+      setBtns(false);
+      showPseudo(P_INSERT, 0, 'Insert at index ' + i + ': must shift elements right.'); render();
+      await step();
+      const n = arr.length;
+      arr.length = n + 1;
+      for (let j = n - 1; j >= i; j--) {
+        showPseudo(P_INSERT, 1, 'j = ' + j + '. Shift arr[' + j + '] → arr[' + (j + 1) + '].'); render(j);
+        await step();
+        showPseudo(P_INSERT, 2, 'arr[' + (j + 1) + '] = arr[' + j + ']'); arr[j + 1] = arr[j]; render(j);
+        await step();
+      }
+      showPseudo(P_INSERT, 3, 'arr[' + i + '] = ' + v); arr[i] = v; render(i);
+      await step();
+      showPseudo(P_INSERT, 4, 'length = ' + arr.length + '. Done.'); setBtns(true);
+      }
+      var P_DELETE = [
+      '// Delete at index — O(n) shift',
+      'for j = index to length-2:',
+      '  arr[j] = arr[j+1]   // shift left',
+      'length = length - 1'
+    ];
+      async function deleteAt() {
+      const i = parseInt(document.getElementById('idx').value, 10);
+      if (isNaN(i) || i < 0) { showPseudo([], -1, 'Enter valid index.'); return; }
+      setBtns(false);
+      showPseudo(P_DELETE, 0, 'Delete at index ' + i + ': shift elements left.'); render(i);
+      await step();
+      if (i >= arr.length) { showPseudo(P_DELETE, 0, 'Index out of range.'); setBtns(true); return; }
+      for (let j = i; j < arr.length - 1; j++) {
+        showPseudo(P_DELETE, 1, 'j = ' + j + '. Copy arr[' + (j + 1) + '] → arr[' + j + '].'); render(j);
+        await step();
+        showPseudo(P_DELETE, 2, 'arr[' + j + '] = arr[' + (j + 1) + ']'); arr[j] = arr[j + 1]; render(j);
+        await step();
+      }
+      arr.pop();
+      showPseudo(P_DELETE, 3, 'length = ' + arr.length + '. Done.'); render();
+      setBtns(true);
+      }
+      function clearArr() { arr = []; render(); showPseudo([], -1, 'Array cleared.'); }
+      function randomArr() {
+        var n = Math.min(20, Math.max(1, parseInt(document.getElementById('rndSize').value, 10) || 6));
+        arr = []; for (var i = 0; i < n; i++) arr.push(Math.floor(Math.random() * 99) + 1);
+        render(); showPseudo([], -1, 'Random array of ' + n + ' elements.');
+      }
+      render();
+      window.get = get;
+      window.set = set;
+      window.insertAt = insertAt;
+      window.deleteAt = deleteAt;
+      window.clearArr = clearArr;
+      window.randomArr = randomArr;
+    })();
+  </script>
+</body>
+</html>

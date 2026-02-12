@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hash table — Visualization</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #1a1b26; color: #c0caf5; padding: 2rem; }
+    h1 { color: #7aa2f7; } .subtitle { color: #565f89; margin-bottom: 1rem; }
+    .controls { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem; align-items: center; }
+    input, button { padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid #414868; background: #24283b; color: #c0caf5; font-size: 1rem; }
+    button { cursor: pointer; background: #7aa2f7; color: #1a1b26; border: none; font-weight: 600; }
+    button:hover:not(:disabled) { background: #89b4fa; } button:disabled { opacity: 0.6; }
+    button.danger { background: #f7768e; }
+    #log { background: #24283b; border-radius: 8px; padding: 1rem; min-height: 90px; margin-bottom: 1rem; border-left: 4px solid #7aa2f7; font-family: Consolas, monospace; white-space: pre-wrap; }
+    #log .pseudo-line { display: block; padding: 2px 6px; margin: 2px 0; border-radius: 4px; }
+    #log .pseudo-line.active { background: #364a7c; color: #7dcfff; }
+    #log .pseudo-line.active::before { content: '▶ '; color: #9ece6a; }
+    #log .message { margin-top: 8px; padding-top: 8px; border-top: 1px solid #414868; color: #a9b1d6; }
+    .viz { padding: 1rem; background: #24283b; border-radius: 12px; }
+    .buckets { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .bucket { min-width: 80px; padding: 0.5rem; background: #1a1b26; border-radius: 8px; border: 2px solid #414868; }
+    .bucket.highlight { border-color: #7dcfff; box-shadow: 0 0 12px rgba(125,207,255,0.4); }
+    .bucket-idx { font-size: 0.75rem; color: #565f89; margin-bottom: 4px; }
+    .bucket-item { padding: 2px 6px; margin: 2px 0; background: #414868; border-radius: 4px; font-size: 0.9rem; color: #7dcfff; }
+    .bucket-item.current { background: #364a7c; border: 1px solid #7dcfff; }
+    .hash-expr { margin-top: 8px; font-size: 0.9rem; color: #9ece6a; }
+  </style>
+</head>
+<body>
+  <h1>Hash table</h1>
+  <p class="subtitle">Step-by-step: current bucket highlighted and pseudocode shown for each step.</p>
+  <div class="controls">
+    <input type="text" id="val" placeholder="Key (number or word)" style="width:140px">
+    <button onclick="insert()">Insert</button>
+    <button onclick="search()">Search</button>
+    <button onclick="del()">Delete</button>
+    <button class="danger" id="btnClear" onclick="clearHash()">Clear</button>
+  </div>
+  <div class="controls">
+    <span style="color:#565f89">Buckets:</span>
+    <input type="number" id="numBuckets" min="3" max="16" value="8" style="width:50px">
+    <span style="color:#565f89">Random:</span>
+    <input type="number" id="rndSize" min="1" max="12" value="6" style="width:50px">
+    <button onclick="randomHash()">Generate</button>
+  </div>
+  <div class="controls" style="border-top:1px solid #414868;padding-top:0.75rem;margin-top:0.25rem;">
+    <span style="color:#565f89">Playback:</span>
+    <label style="display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer"><input type="radio" name="playback" id="modeAutoplay" checked> Autoplay</label>
+    <label style="display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer"><input type="radio" name="playback" id="modeStep"> Step by step</label>
+    <button type="button" id="btnNextStep" disabled style="margin-left:0.5rem">Next step</button>
+  </div>
+  <div id="log">Operations and pseudocode appear here.</div>
+  <div class="viz" id="viz"></div>
+
+  <script>
+    const BUCKETS = 8;
+    let buckets = [];
+    let bucketCount = BUCKETS;
+    const STEP = 1000;
+    let animating = false;
+    function getAutoplay() { return document.getElementById('modeAutoplay').checked; }
+    function setBtns(on) { animating = !on; document.querySelectorAll('.controls button:not(#btnClear):not(#btnNextStep)').forEach(b => { b.disabled = !on; }); const nb = document.getElementById('btnNextStep'); if (nb) nb.disabled = on || getAutoplay(); }
+    function waitForStep() { return new Promise(r => { window._resolveStep = r; }); }
+    function step() { return getAutoplay() ? new Promise(r => setTimeout(r, STEP)) : waitForStep(); }
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+    document.getElementById('modeAutoplay').addEventListener('change', function() { if (document.getElementById('btnNextStep')) document.getElementById('btnNextStep').disabled = true; });
+    document.getElementById('modeStep').addEventListener('change', function() { if (animating) document.getElementById('btnNextStep').disabled = false; });
+    document.getElementById('btnNextStep').addEventListener('click', function() { if (window._resolveStep) { window._resolveStep(); window._resolveStep = null; } });
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function showPseudo(lines, active, msg) {
+      document.getElementById('log').innerHTML = (lines && lines.length ? lines.map((l,i) => '<span class="pseudo-line' + (i===active?' active':'') + '">' + esc(l) + '</span>').join('') : '') + (msg ? '<span class="message">' + esc(msg) + '</span>' : '');
+    }
+    function hash(key) {
+      const s = String(key);
+      let h = 0;
+      for (let i = 0; i < s.length; i++) h = ((h << 5) - h) + s.charCodeAt(i) | 0;
+      return Math.abs(h) % bucketCount;
+    }
+    function ensureBuckets() {
+      bucketCount = Math.min(16, Math.max(3, parseInt(document.getElementById('numBuckets').value, 10) || BUCKETS));
+      while (buckets.length < bucketCount) buckets.push([]);
+      buckets = buckets.slice(0, bucketCount);
+    }
+    function render(highlightBucket = -1, highlightKey = null) {
+      ensureBuckets();
+      const v = document.getElementById('viz');
+      v.innerHTML = '';
+      buckets.forEach((list, i) => {
+        const b = document.createElement('div');
+        b.className = 'bucket' + (i === highlightBucket ? ' highlight' : '');
+        b.innerHTML = '<div class="bucket-idx">[' + i + ']</div>';
+        list.forEach(entry => {
+          const span = document.createElement('div');
+          span.className = 'bucket-item' + (highlightKey !== null && entry === highlightKey ? ' current' : '');
+          span.textContent = entry;
+          b.appendChild(span);
+        });
+        v.appendChild(b);
+      });
+    }
+    const P_INSERT = [
+      '// Insert — hash to bucket, append (chaining), O(1) avg',
+      'index = hash(key) % num_buckets',
+      'append key to buckets[index]',
+      '// duplicate keys allowed in this simple version'
+    ];
+    async function insert() {
+      const key = document.getElementById('val').value.trim();
+      if (!key) { showPseudo([], -1, 'Enter a key.'); return; }
+      setBtns(false);
+      ensureBuckets();
+      const idx = hash(key);
+      showPseudo(P_INSERT, 0, 'Insert "' + key + '": compute bucket.'); render();
+      await step();
+      showPseudo(P_INSERT, 1, 'index = hash("' + key + '") % ' + bucketCount + ' = ' + idx + '.'); render(idx);
+      await step();
+      buckets[idx].push(key);
+      showPseudo(P_INSERT, 2, 'Append "' + key + '" to bucket ' + idx + '.'); render(idx);
+      await step();
+      showPseudo(P_INSERT, 3, 'Done.'); setBtns(true);
+    }
+    const P_SEARCH = [
+      '// Search — hash to bucket, scan chain, O(1) avg',
+      'index = hash(key) % num_buckets',
+      'for each item in buckets[index]:',
+      '  if item == key: return true',
+      'return false'
+    ];
+    async function search() {
+      const key = document.getElementById('val').value.trim();
+      if (!key) { showPseudo([], -1, 'Enter a key.'); return; }
+      setBtns(false);
+      ensureBuckets();
+      const idx = hash(key);
+      showPseudo(P_SEARCH, 0, 'Search "' + key + '": compute bucket.'); render();
+      await step();
+      showPseudo(P_SEARCH, 1, 'index = ' + idx + '.'); render(idx);
+      await step();
+      const list = buckets[idx];
+      for (let j = 0; j < list.length; j++) {
+        showPseudo(P_SEARCH, 2, 'Check item "' + list[j] + '" == "' + key + '"?'); render(idx, list[j]);
+        await step();
+        showPseudo(P_SEARCH, 3, list[j] === key ? 'Yes → return true. Found!' : 'No → next.');
+        if (list[j] === key) { setBtns(true); return; }
+        await step();
+      }
+      showPseudo(P_SEARCH, 4, 'No match in bucket. return false.'); setBtns(true);
+    }
+    const P_DELETE = [
+      '// Delete — hash to bucket, find key in chain, remove',
+      'index = hash(key) % num_buckets',
+      'find key in buckets[index]',
+      'if found: remove from chain',
+      '// key not found: do nothing'
+    ];
+    async function del() {
+      const key = document.getElementById('val').value.trim();
+      if (!key) { showPseudo([], -1, 'Enter a key.'); return; }
+      setBtns(false);
+      ensureBuckets();
+      const idx = hash(key);
+      const list = buckets[idx];
+      showPseudo(P_DELETE, 0, 'Delete "' + key + '": compute bucket.'); render();
+      await step();
+      showPseudo(P_DELETE, 1, 'index = ' + idx + '.'); render(idx);
+      await step();
+      showPseudo(P_DELETE, 2, 'Scan bucket ' + idx + ' for "' + key + '".'); render(idx);
+      await step();
+      const i = list.indexOf(key);
+      if (i >= 0) {
+        render(idx, key);
+        await step();
+        showPseudo(P_DELETE, 3, 'Found at position ' + i + ' → remove from chain.'); list.splice(i, 1);
+      } else showPseudo(P_DELETE, 3, 'Key not in bucket — nothing to remove.');
+      render(); setBtns(true);
+    }
+    function clearHash() { ensureBuckets(); buckets.forEach(b => b.length = 0); render(); showPseudo([], -1, 'Hash table cleared.'); }
+    function randomHash() {
+      ensureBuckets(); buckets.forEach(b => b.length = 0);
+      const n = Math.min(12, Math.max(1, parseInt(document.getElementById('rndSize').value, 10) || 6));
+      const words = ['one','two','three','four','five','six','seven','eight','nine','ten','a','b'];
+      for (let i = 0; i < n; i++) {
+        const w = words[i % words.length] + (i >= words.length ? i : '');
+        buckets[hash(w)].push(w);
+      }
+      render(); showPseudo([], -1, 'Random hash table with ' + n + ' keys.');
+    }
+    render();
+  </script>
+</body>
+</html>

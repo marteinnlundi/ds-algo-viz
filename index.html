@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Data Structures — Visualizations</title>
+  <link rel="stylesheet" href="css/common.css">
+  <link rel="stylesheet" href="css/hub.css">
+</head>
+<body>
+  <div class="header">
+    <a href="#" id="backBtn" class="back-btn" aria-label="Back to home">← Back to home</a>
+    <button type="button" id="backCategoriesBtn" class="back-categories-btn" aria-label="Back to categories">← Back to categories</button>
+    <h1>Data structures & algorithms — visualizations</h1>
+  </div>
+
+  <div id="home">
+    <div id="categories" class="visible">
+      <h1>Choose a category</h1>
+      <p class="subtitle">Step-by-step visualizations with highlighted current element and full pseudocode.</p>
+      <div class="categories-grid">
+        <a href="#" class="category-card" data-category="data-structures">
+          <h2>Data structures</h2>
+          <p>Lists, arrays, stack, queue, deque, tree, map, hash table, heap</p>
+          <span class="count">11 visualizations</span>
+        </a>
+        <a href="#" class="category-card" data-category="searching">
+          <h2>Searching algorithms</h2>
+          <p>Linear, binary, jump, exponential, interpolation search</p>
+          <span class="count">5 visualizations</span>
+        </a>
+        <a href="#" class="category-card" data-category="sorting">
+          <h2>Sorting algorithms</h2>
+          <p>Bubble, insertion, selection, merge, quick, heap, counting sort</p>
+          <span class="count">7 visualizations</span>
+        </a>
+        <a href="#" class="category-card" data-category="trees">
+          <h2>Trees</h2>
+          <p>Trie, BST traversals (inorder, preorder, postorder)</p>
+          <span class="count">2 visualizations</span>
+        </a>
+        <a href="#" class="category-card" data-category="hashing">
+          <h2>Hashing</h2>
+          <p>Hash table with chaining, linear probing</p>
+          <span class="count">2 visualizations</span>
+        </a>
+        <a href="#" class="category-card" data-category="recursive">
+          <h2>Recursive & classic</h2>
+          <p>Fibonacci, Tower of Hanoi</p>
+          <span class="count">2 visualizations</span>
+        </a>
+      </div>
+    </div>
+    <div id="gridWrap">
+      <h1 id="gridTitle">Category</h1>
+      <p class="subtitle" id="gridSubtitle"></p>
+      <div class="grid" id="grid">
+      <div class="card" data-src="../01-singly-linked-lists/visualization/index.html" data-category="data-structures">
+        <h2>Singly linked list</h2>
+        <p>Step-by-step pseudocode: insert head/tail, delete, search</p>
+      </div>
+      <div class="card" data-src="pages/doubly-linked-list.html" data-category="data-structures">
+        <h2>Doubly linked list</h2>
+        <p>Step-by-step: insert head/tail, delete, search (prev & next)</p>
+      </div>
+      <div class="card" data-src="pages/array.html" data-category="data-structures">
+        <h2>Array</h2>
+        <p>Step-by-step: get, set, insert, delete (with shift pseudocode)</p>
+      </div>
+      <div class="card" data-src="pages/stack.html" data-category="data-structures">
+        <h2>Stack</h2>
+        <p>Step-by-step: push, pop, peek (LIFO)</p>
+      </div>
+      <div class="card" data-src="pages/queue.html" data-category="data-structures">
+        <h2>Queue</h2>
+        <p>Step-by-step: enqueue, dequeue, peek (FIFO)</p>
+      </div>
+      <div class="card" data-src="pages/deque.html" data-category="data-structures">
+        <h2>Deque</h2>
+        <p>Step-by-step: push/pop front and back</p>
+      </div>
+      <div class="card" data-src="pages/binary-search-tree.html" data-category="data-structures">
+        <h2>Binary search tree</h2>
+        <p>Step-by-step: insert, search (left &lt; node &lt; right)</p>
+      </div>
+      <div class="card" data-src="pages/map.html" data-category="data-structures">
+        <h2>Map / dictionary</h2>
+        <p>Step-by-step: put, get, remove (key → value)</p>
+      </div>
+      <div class="card" data-src="pages/hash-table.html" data-category="data-structures hashing">
+        <h2>Hash table</h2>
+        <p>Step-by-step: insert, search, delete (buckets + hash)</p>
+      </div>
+      <div class="card" data-src="pages/priority-queue.html" data-category="data-structures">
+        <h2>Priority queue</h2>
+        <p>Step-by-step: insert, remove min (by priority)</p>
+      </div>
+      <div class="card" data-src="pages/heap.html" data-category="data-structures">
+        <h2>Heap</h2>
+        <p>Step-by-step: insert (bubble up), extract min (bubble down)</p>
+      </div>
+      <div class="card" data-src="pages/linear-search.html" data-category="searching">
+        <h2>Linear search</h2>
+        <p>Step-by-step: scan array for target, O(n)</p>
+      </div>
+      <div class="card" data-src="pages/binary-search.html" data-category="searching">
+        <h2>Binary search</h2>
+        <p>Step-by-step: search in sorted array, O(log n)</p>
+      </div>
+      <div class="card" data-src="pages/bubble-sort.html" data-category="sorting">
+        <h2>Bubble sort</h2>
+        <p>Step-by-step: compare and swap adjacent, O(n²)</p>
+      </div>
+      <div class="card" data-src="pages/insertion-sort.html" data-category="sorting">
+        <h2>Insertion sort</h2>
+        <p>Step-by-step: extend sorted prefix by inserting, O(n²)</p>
+      </div>
+      <div class="card" data-src="pages/selection-sort.html" data-category="sorting">
+        <h2>Selection sort</h2>
+        <p>Step-by-step: repeatedly select minimum, O(n²)</p>
+      </div>
+      <div class="card" data-src="pages/jump-search.html" data-category="searching">
+        <h2>Jump search</h2>
+        <p>Step-by-step: jump √n then linear back, O(√n), sorted</p>
+      </div>
+      <div class="card" data-src="pages/exponential-search.html" data-category="searching">
+        <h2>Exponential search</h2>
+        <p>Step-by-step: find range 2^k then binary search, sorted</p>
+      </div>
+      <div class="card" data-src="pages/interpolation-search.html" data-category="searching">
+        <h2>Interpolation search</h2>
+        <p>Step-by-step: estimate position from range, sorted</p>
+      </div>
+      <div class="card" data-src="pages/merge-sort.html" data-category="sorting">
+        <h2>Merge sort</h2>
+        <p>Step-by-step: recursive split and merge, O(n log n)</p>
+      </div>
+      <div class="card" data-src="pages/quick-sort.html" data-category="sorting">
+        <h2>Quick sort</h2>
+        <p>Step-by-step: pivot, partition, recurse, O(n log n) avg</p>
+      </div>
+      <div class="card" data-src="pages/heap-sort.html" data-category="sorting">
+        <h2>Heap sort</h2>
+        <p>Step-by-step: build max-heap, extract max, O(n log n)</p>
+      </div>
+      <div class="card" data-src="pages/counting-sort.html" data-category="sorting">
+        <h2>Counting sort</h2>
+        <p>Step-by-step: count, prefix sum, place, O(n + k)</p>
+      </div>
+      <div class="card" data-src="pages/hash-linear-probing.html" data-category="hashing">
+        <h2>Hash table — linear probing</h2>
+        <p>Step-by-step: open addressing, probe (i+1) on collision</p>
+      </div>
+      <div class="card" data-src="pages/trie.html" data-category="trees">
+        <h2>Trie</h2>
+        <p>Step-by-step: insert, search, starts-with (prefix tree)</p>
+      </div>
+      <div class="card" data-src="pages/tree-traversals.html" data-category="trees">
+        <h2>BST traversals</h2>
+        <p>Step-by-step: inorder, preorder, postorder (recursive)</p>
+      </div>
+      <div class="card" data-src="pages/fibonacci.html" data-category="recursive">
+        <h2>Fibonacci (recursive)</h2>
+        <p>Step-by-step: fib(n)=fib(n-1)+fib(n-2), call stack</p>
+      </div>
+      <div class="card" data-src="pages/tower-of-hanoi.html" data-category="recursive">
+        <h2>Tower of Hanoi</h2>
+        <p>Step-by-step: move n disks, recursive</p>
+      </div>
+    </div>
+    </div>
+  </div>
+
+  <div id="viewer">
+    <iframe id="frame" title="Visualization"></iframe>
+  </div>
+
+  <script src="js/hub.js"></script>
+</body>
+</html>

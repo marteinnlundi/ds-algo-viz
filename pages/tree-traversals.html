@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BST traversals — Inorder, Preorder, Postorder</title>
+  <link rel="stylesheet" href="../css/common.css">
+  <style>
+    .tree-wrap { padding: 1.5rem; background: #1e2130; border-radius: 12px; min-height: 280px; overflow: auto; border: 1px solid #3b4261; }
+    .tree-wrap svg { display: block; margin: 0 auto; }
+    .tree-edge { fill: none; stroke: #89b4fa; stroke-width: 2; stroke-linecap: round; }
+    .tree-node { fill: #3d4458; stroke: #89b4fa; stroke-width: 1.5; transition: stroke 0.2s, filter 0.2s, fill 0.2s; }
+    .tree-node.current { stroke: #7dcfff; fill: #4a5a7c; filter: drop-shadow(0 0 8px rgba(125, 207, 255, 0.5)); }
+    .tree-node.visited { stroke: #9ece6a; fill: #3d4a3d; }
+    .tree-node-text { fill: #e4e8f0; font-family: 'Segoe UI', system-ui, sans-serif; font-weight: 600; font-size: 13px; text-anchor: middle; dominant-baseline: central; }
+    .tree-node.current .tree-node-text { fill: #7dcfff; }
+    .tree-node.visited .tree-node-text { fill: #9ece6a; }
+    .output { margin-top: 1rem; padding: 0.75rem; background: #1e2130; border-radius: 8px; color: #9ece6a; font-family: Consolas, monospace; border: 1px solid #3b4261; }
+  </style>
+</head>
+<body>
+  <h1>BST traversals</h1>
+  <p class="subtitle">Step-by-step: inorder (L–node–R), preorder (node–L–R), postorder (L–R–node). Recursive.</p>
+  <div class="controls">
+    <button onclick="runInorder()">Inorder</button>
+    <button onclick="runPreorder()">Preorder</button>
+    <button onclick="runPostorder()">Postorder</button>
+    <button class="danger" id="btnClear" onclick="clearAll()">Clear</button>
+  </div>
+  <div class="controls">
+    <span class="playback-label">Size:</span>
+    <input type="number" id="rndSize" min="3" max="12" value="7" style="width:55px">
+    <span class="playback-label">Shape:</span>
+    <label><input type="radio" name="treeShape" id="shapeUnbalanced" checked> Unbalanced</label>
+    <label><input type="radio" name="treeShape" id="shapeBalanced"> Balanced</label>
+    <button onclick="randomTree()">Generate BST</button>
+  </div>
+  <div class="controls playback-row">
+    <span class="playback-label">Playback:</span>
+    <label><input type="radio" name="playback" id="modeAutoplay" checked> Autoplay</label>
+    <label><input type="radio" name="playback" id="modeStep"> Step by step</label>
+    <button type="button" id="btnNextStep" disabled>Next step</button>
+  </div>
+  <div id="log">Operations and pseudocode appear here.</div>
+  <div class="tree-wrap" id="tree"></div>
+  <div class="output" id="output"></div>
+
+  <script>
+    let root = null;
+    const STEP = 1000;
+    let animating = false;
+    function getAutoplay() { return document.getElementById('modeAutoplay').checked; }
+    function setBtns(on) { animating = !on; document.querySelectorAll('.controls button:not(#btnClear):not(#btnNextStep)').forEach(b => { b.disabled = !on; }); const nb = document.getElementById('btnNextStep'); if (nb) nb.disabled = on || getAutoplay(); }
+    function waitForStep() { return new Promise(r => { window._resolveStep = r; }); }
+    function step() { return getAutoplay() ? new Promise(r => setTimeout(r, STEP)) : waitForStep(); }
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function showPseudo(lines, active, msg) { document.getElementById('log').innerHTML = (lines && lines.length ? lines.map((l,i) => '<span class="pseudo-line' + (i===active?' active':'') + '">' + esc(l) + '</span>').join('') : '') + (msg ? '<span class="message">' + esc(msg) + '</span>' : ''); }
+    function treeHeight(n) { if (!n) return 0; return 1 + Math.max(treeHeight(n.left), treeHeight(n.right)); }
+    var NODE_R = 22, LEVEL_DY = 72, PAD = 40;
+    function assignCoords(n, left, right, y, coords) {
+      if (!n) return;
+      var x = (left + right) / 2;
+      n._x = x; n._y = y; coords.push(n);
+      var half = (right - left) / 2;
+      assignCoords(n.left, left, left + half, y + LEVEL_DY, coords);
+      assignCoords(n.right, left + half, right, y + LEVEL_DY, coords);
+    }
+    function render(highlightVal, visited) {
+      var el = document.getElementById('tree');
+      el.innerHTML = '';
+      if (!root) { el.innerHTML = '<p style="color:#7982a0;margin:0;">(empty tree — click Generate BST)</p>'; return; }
+      var h = treeHeight(root), width = Math.max(320, Math.pow(2, h) * 48);
+      var totalWidth = width + PAD * 2, totalHeight = h * LEVEL_DY + PAD * 2, coords = [];
+      assignCoords(root, PAD, PAD + width, PAD, coords);
+      var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('viewBox', '0 0 ' + totalWidth + ' ' + totalHeight);
+      svg.setAttribute('width', '100%');
+      svg.setAttribute('height', '' + totalHeight);
+      var defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+      var marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+      marker.setAttribute('id', 'traversals-arrow');
+      marker.setAttribute('markerWidth', '8'); marker.setAttribute('markerHeight', '6');
+      marker.setAttribute('refX', '7'); marker.setAttribute('refY', '3');
+      marker.setAttribute('orient', 'auto');
+      var poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+      poly.setAttribute('points', '0 0, 8 3, 0 6');
+      poly.setAttribute('fill', '#89b4fa');
+      marker.appendChild(poly); defs.appendChild(marker); svg.appendChild(defs);
+      function edgeEnd(px, py, cx, cy) {
+        var dx = cx - px, dy = cy - py, len = Math.sqrt(dx*dx+dy*dy) || 1;
+        return { x: cx - (dx/len)*NODE_R, y: cy - (dy/len)*NODE_R };
+      }
+      function edgeStart(px, py, cx, cy) {
+        var dx = cx - px, dy = cy - py, len = Math.sqrt(dx*dx+dy*dy) || 1;
+        return { x: px + (dx/len)*NODE_R, y: py + (dy/len)*NODE_R };
+      }
+      coords.forEach(function (n) {
+        if (n.left) {
+          var start = edgeStart(n._x, n._y, n.left._x, n.left._y), end = edgeEnd(n._x, n._y, n.left._x, n.left._y);
+          var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', start.x); line.setAttribute('y1', start.y);
+          line.setAttribute('x2', end.x); line.setAttribute('y2', end.y);
+          line.setAttribute('stroke', '#89b4fa'); line.setAttribute('stroke-width', '2');
+          line.setAttribute('marker-end', 'url(#traversals-arrow)');
+          svg.appendChild(line);
+        }
+        if (n.right) {
+          var start = edgeStart(n._x, n._y, n.right._x, n.right._y), end = edgeEnd(n._x, n._y, n.right._x, n.right._y);
+          var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', start.x); line.setAttribute('y1', start.y);
+          line.setAttribute('x2', end.x); line.setAttribute('y2', end.y);
+          line.setAttribute('stroke', '#89b4fa'); line.setAttribute('stroke-width', '2');
+          line.setAttribute('marker-end', 'url(#traversals-arrow)');
+          svg.appendChild(line);
+        }
+      });
+      coords.forEach(function (n) {
+        var isCurrent = highlightVal !== null && n.value === highlightVal;
+        var isVisited = visited && visited.indexOf(n.value) !== -1;
+        var g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.setAttribute('class', 'tree-node' + (isCurrent ? ' current' : '') + (isVisited ? ' visited' : ''));
+        var circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', n._x); circle.setAttribute('cy', n._y); circle.setAttribute('r', NODE_R);
+        circle.setAttribute('fill', isVisited ? '#3d4a3d' : (isCurrent ? '#4a5a7c' : '#3d4458'));
+        circle.setAttribute('stroke', isCurrent ? '#7dcfff' : (isVisited ? '#9ece6a' : '#89b4fa'));
+        circle.setAttribute('stroke-width', '1.5');
+        g.appendChild(circle);
+        var text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', n._x); text.setAttribute('y', n._y);
+        text.setAttribute('class', 'tree-node-text');
+        text.setAttribute('fill', isCurrent ? '#7dcfff' : (isVisited ? '#9ece6a' : '#e4e8f0'));
+        text.textContent = n.value;
+        g.appendChild(text);
+        svg.appendChild(g);
+      });
+      el.appendChild(svg);
+    }
+    const P_IN = ['// Inorder: left, node, right', 'if node is null: return', 'inorder(node.left)', 'visit(node)', 'inorder(node.right)'];
+    const P_PRE = ['// Preorder: node, left, right', 'if node is null: return', 'visit(node)', 'preorder(node.left)', 'preorder(node.right)'];
+    const P_POST = ['// Postorder: left, right, node', 'if node is null: return', 'postorder(node.left)', 'postorder(node.right)', 'visit(node)'];
+    async function inorder(n, out, visited) {
+      if (!n) return;
+      showPseudo(P_IN, 1, 'inorder(left) — go to left of ' + n.value); render(n.value, visited); await step();
+      await inorder(n.left, out, visited);
+      showPseudo(P_IN, 2, 'visit(' + n.value + ')'); out.push(n.value); visited.push(n.value);
+      render(n.value, visited); await step();
+      showPseudo(P_IN, 3, 'inorder(right) — go to right of ' + n.value); render(n.value, visited); await step();
+      await inorder(n.right, out, visited);
+    }
+    async function preorder(n, out, visited) {
+      if (!n) return;
+      showPseudo(P_PRE, 1, 'visit(' + n.value + ')'); out.push(n.value); visited.push(n.value);
+      render(n.value, visited); await step();
+      showPseudo(P_PRE, 2, 'preorder(left)'); render(n.value, visited); await step();
+      await preorder(n.left, out, visited);
+      showPseudo(P_PRE, 3, 'preorder(right)'); render(n.value, visited); await step();
+      await preorder(n.right, out, visited);
+    }
+    async function postorder(n, out, visited) {
+      if (!n) return;
+      showPseudo(P_POST, 1, 'postorder(left)'); render(n.value, visited); await step();
+      await postorder(n.left, out, visited);
+      showPseudo(P_POST, 2, 'postorder(right)'); render(n.value, visited); await step();
+      await postorder(n.right, out, visited);
+      showPseudo(P_POST, 3, 'visit(' + n.value + ')'); out.push(n.value); visited.push(n.value);
+      render(n.value, visited); await step();
+    }
+    async function runInorder() {
+      if (!root) { showPseudo([], -1, 'Generate a tree first.'); return; }
+      setBtns(false);
+      const out = [], visited = [];
+      showPseudo(P_IN, 0, 'Inorder traversal (L–node–R).'); render(null, []);
+      await step();
+      await inorder(root, out, visited);
+      document.getElementById('output').textContent = 'Result: ' + out.join(', ');
+      setBtns(true);
+    }
+    async function runPreorder() {
+      if (!root) { showPseudo([], -1, 'Generate a tree first.'); return; }
+      setBtns(false);
+      const out = [], visited = [];
+      showPseudo(P_PRE, 0, 'Preorder traversal (node–L–R).'); render(null, []);
+      await step();
+      await preorder(root, out, visited);
+      document.getElementById('output').textContent = 'Result: ' + out.join(', ');
+      setBtns(true);
+    }
+    async function runPostorder() {
+      if (!root) { showPseudo([], -1, 'Generate a tree first.'); return; }
+      setBtns(false);
+      const out = [], visited = [];
+      showPseudo(P_POST, 0, 'Postorder traversal (L–R–node).'); render(null, []);
+      await step();
+      await postorder(root, out, visited);
+      document.getElementById('output').textContent = 'Result: ' + out.join(', ');
+      setBtns(true);
+    }
+    function clearAll() { root = null; render(); document.getElementById('output').textContent = ''; showPseudo([], -1, 'Cleared.'); }
+    function buildBalancedBST(arr, lo, hi) {
+      if (lo > hi) return null;
+      var mid = (lo + hi) >> 1;
+      var node = { value: arr[mid], left: null, right: null };
+      node.left = buildBalancedBST(arr, lo, mid - 1);
+      node.right = buildBalancedBST(arr, mid + 1, hi);
+      return node;
+    }
+    function randomTree() {
+      var n = Math.min(12, Math.max(3, parseInt(document.getElementById('rndSize').value, 10) || 7));
+      var balanced = document.getElementById('shapeBalanced').checked;
+      root = null;
+      var vals = [];
+      for (var i = 0; i < n; i++) vals.push(Math.floor(Math.random() * 99) + 1);
+      if (balanced) {
+        vals.sort(function (a, b) { return a - b; });
+        root = buildBalancedBST(vals, 0, vals.length - 1);
+        render();
+        document.getElementById('output').textContent = '';
+        showPseudo([], -1, 'Balanced BST with ' + n + ' values.');
+      } else {
+        vals.forEach(function (v) {
+          if (!root) root = { value: v, left: null, right: null };
+          else {
+            var cur = root;
+            while (true) {
+              if (v < cur.value) { if (!cur.left) { cur.left = { value: v, left: null, right: null }; break; } cur = cur.left; }
+              else if (v > cur.value) { if (!cur.right) { cur.right = { value: v, left: null, right: null }; break; } cur = cur.right; }
+              else break;
+            }
+          }
+        });
+        render();
+        document.getElementById('output').textContent = '';
+        showPseudo([], -1, 'Unbalanced BST with ' + n + ' values.');
+      }
+    }
+    document.getElementById('modeAutoplay').addEventListener('change', function() { if (document.getElementById('btnNextStep')) document.getElementById('btnNextStep').disabled = true; });
+    document.getElementById('modeStep').addEventListener('change', function() { if (animating) document.getElementById('btnNextStep').disabled = false; });
+    document.getElementById('btnNextStep').addEventListener('click', function() { if (window._resolveStep) { window._resolveStep(); window._resolveStep = null; } });
+    render();
+  </script>
+</body>
+</html>

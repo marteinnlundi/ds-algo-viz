@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stack — Visualization</title>
+  <link rel="stylesheet" href="../css/common.css">
+  <style>
+    .viz { display: flex; flex-direction: column-reverse; align-items: center; gap: 4px; min-height: 140px; padding: 1rem; background: #24283b; border-radius: 12px; width: 200px; }
+    .stack-item { width: 120px; padding: 0.5rem 1rem; background: #414868; border-radius: 8px; border: 2px solid #565f89; text-align: center; font-weight: 700; color: #7dcfff; transition: all 0.2s; }
+    .stack-item.current { border-color: #7dcfff; box-shadow: 0 0 14px rgba(125,207,255,0.6); background: #364a7c; }
+    .stack-item.new { border-color: #9ece6a; }
+    .top-label { font-size: 0.8rem; color: #9ece6a; margin-bottom: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Stack (LIFO)</h1>
+  <p class="subtitle">Step-by-step: current line highlighted and pseudocode shown for each step.</p>
+  <div class="controls">
+    <input type="text" id="val" placeholder="Value" style="width:100px">
+    <button onclick="push()">Push</button>
+    <button onclick="pop()">Pop</button>
+    <button onclick="peek()">Peek</button>
+    <button class="danger" id="btnClear" onclick="clearStack()">Clear</button>
+  </div>
+  <div class="controls">
+    <span style="color:#565f89">Random:</span>
+    <input type="number" id="rndSize" min="1" max="12" value="5" style="width:50px">
+    <button onclick="randomStack()">Generate</button>
+  </div>
+  <div class="controls playback-row">
+    <span class="playback-label">Playback:</span>
+    <label><input type="radio" name="playback" id="modeAutoplay" checked> Autoplay</label>
+    <label><input type="radio" name="playback" id="modeStep"> Step by step</label>
+    <button type="button" id="btnNextStep" disabled>Next step</button>
+  </div>
+  <div id="log">Operations and pseudocode appear here.</div>
+  <div class="viz" id="viz">
+    <span class="top-label">top →</span>
+  </div>
+
+  <script src="../js/common-viz.js"></script>
+  <script>
+    (function () {
+      var stack = [];
+      var animating = false;
+      function setBtns(on) { animating = !on; document.querySelectorAll('.controls button:not(#btnClear):not(#btnNextStep)').forEach(function (b) { b.disabled = !on; }); var nb = document.getElementById('btnNextStep'); if (nb) nb.disabled = on || window.VizCommon.getAutoplay(); }
+      function showPseudo(lines, active, msg) { window.VizCommon.showPseudo(lines, active, msg); }
+      function step() { return window.VizCommon.step(); }
+      window.VizCommon.setupPlayback(1000, function () { return animating; }, setBtns);
+        if (highlightTop === undefined) highlightTop = false;
+      if (newItem === undefined) newItem = false;
+      var v = document.getElementById('viz');
+      v.innerHTML = '<span class="top-label">top →</span>';
+      for (var i = stack.length - 1; i >= 0; i--) {
+        var el = document.createElement('div');
+        el.className = 'stack-item';
+        if (highlightTop && i === stack.length - 1) el.classList.add('current');
+        if (newItem && i === stack.length - 1) el.classList.add('new');
+        el.textContent = stack[i];
+        v.appendChild(el);
+      }
+      }
+      var P_PUSH = [
+      '// Push — add on top (LIFO), O(1)',
+      'if full (optional): error  // fixed-size stack',
+      'stack.append(value)',
+      '// top is now the last element'
+    ];
+      async function push() {
+      var val = document.getElementById('val').value.trim();
+      if (!val) { showPseudo([], -1, 'Enter a value.'); return; }
+      var v = isNaN(Number(val)) ? val : Number(val);
+      document.getElementById('val').value = '';
+      setBtns(false);
+      showPseudo(P_PUSH, 0, 'Push ' + v + ' onto stack (top of stack).'); render();
+      await step();
+      showPseudo(P_PUSH, 1, 'Stack has no fixed size here — not full.'); await step();
+      showPseudo(P_PUSH, 2, 'stack.append(' + v + ')'); render();
+      await step();
+      stack.push(v);
+      showPseudo(P_PUSH, 3, 'Top is now ' + v + '.'); render(true, true);
+      setBtns(true);
+      }
+      var P_POP = [
+      '// Pop — remove and return top, O(1)',
+      'if stack is empty: return null',
+      'top_value = stack[length-1]',
+      'remove last element',
+      'return top_value'
+    ];
+      async function pop() {
+      setBtns(false);
+      showPseudo(P_POP, 0, 'Pop: remove element from top.'); render(stack.length > 0);
+      await step();
+      if (stack.length === 0) { showPseudo(P_POP, 0, 'Stack is empty → return null.'); setBtns(true); return; }
+      showPseudo(P_POP, 1, 'Top = stack[' + (stack.length - 1) + '] = ' + stack[stack.length - 1]); render(true);
+      await step();
+      showPseudo(P_POP, 2, 'Save top value.'); await step();
+      var v = stack.pop();
+      showPseudo(P_POP, 3, 'Remove last element.'); render();
+      await step();
+      showPseudo(P_POP, 4, 'return ' + v + '.'); setBtns(true);
+      }
+      var P_PEEK = [
+      '// Peek — view top without removing, O(1)',
+      'if stack is empty: return null',
+      'return stack[length-1]   // top'
+    ];
+      async function peek() {
+      setBtns(false);
+      showPseudo(P_PEEK, 0, 'Peek at top (no removal).'); render(true);
+      await step();
+      showPseudo(P_PEEK, 1, stack.length === 0 ? 'Stack empty → return null.' : 'Not empty.');
+      await step();
+      showPseudo(P_PEEK, 2, stack.length ? 'return stack[' + (stack.length - 1) + '] = ' + stack[stack.length - 1] : 'return null'); setBtns(true);
+      }
+      function clearStack() { stack = []; render(); showPseudo([], -1, 'Stack cleared.'); }
+      function randomStack() {
+        var n = Math.min(12, Math.max(1, parseInt(document.getElementById('rndSize').value, 10) || 5));
+        stack = []; for (var i = 0; i < n; i++) stack.push(Math.floor(Math.random() * 99) + 1);
+        render(); showPseudo([], -1, 'Stack of ' + n + ' elements (top = ' + stack[stack.length - 1] + ').');
+      }
+      render();
+      window.push = push;
+      window.pop = pop;
+      window.peek = peek;
+      window.clearStack = clearStack;
+      window.randomStack = randomStack;
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trie — Visualization</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #1a1b26; color: #c0caf5; padding: 2rem; }
+    h1 { color: #7aa2f7; } .subtitle { color: #565f89; margin-bottom: 1rem; }
+    .controls { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem; align-items: center; }
+    input, button { padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid #414868; background: #24283b; color: #c0caf5; font-size: 1rem; }
+    button { cursor: pointer; background: #7aa2f7; color: #1a1b26; border: none; font-weight: 600; }
+    button:hover:not(:disabled) { background: #89b4fa; } button:disabled { opacity: 0.6; }
+    button.danger { background: #f7768e; }
+    #log { background: #24283b; border-radius: 8px; padding: 1rem; min-height: 90px; margin-bottom: 1rem; border-left: 4px solid #7aa2f7; font-family: Consolas, monospace; white-space: pre-wrap; }
+    #log .pseudo-line { display: block; padding: 2px 6px; margin: 2px 0; border-radius: 4px; }
+    #log .pseudo-line.active { background: #364a7c; color: #7dcfff; }
+    #log .pseudo-line.active::before { content: '▶ '; color: #9ece6a; }
+    #log .message { margin-top: 8px; padding-top: 8px; border-top: 1px solid #414868; color: #a9b1d6; }
+    .trie-viz { padding: 1rem; background: #24283b; border-radius: 12px; min-height: 120px; font-size: 0.9rem; }
+    .trie-node { display: inline-flex; align-items: center; padding: 0.25rem 0.5rem; margin: 2px; background: #414868; border-radius: 6px; border: 2px solid #565f89; transition: all 0.2s; }
+    .trie-node.current { border-color: #7dcfff; box-shadow: 0 0 12px rgba(125,207,255,0.5); background: #364a7c; }
+    .trie-node.end { border-color: #9ece6a; }
+    .trie-node .char { font-weight: 700; color: #7dcfff; margin-right: 4px; }
+    .trie-node .end-marker { font-size: 0.7rem; color: #9ece6a; }
+  </style>
+</head>
+<body>
+  <h1>Trie (prefix tree)</h1>
+  <p class="subtitle">Step-by-step: current node highlighted and pseudocode shown for each step.</p>
+  <div class="controls">
+    <input type="text" id="word" placeholder="Word (a–z)" style="width:140px" maxlength="20">
+    <button onclick="insert()">Insert</button>
+    <button onclick="search()">Search</button>
+    <button onclick="startsWith()">Starts with</button>
+    <button class="danger" id="btnClear" onclick="clearAll()">Clear</button>
+  </div>
+  <div class="controls" style="border-top:1px solid #414868;padding-top:0.75rem;margin-top:0.25rem;">
+    <span style="color:#565f89">Playback:</span>
+    <label style="display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer"><input type="radio" name="playback" id="modeAutoplay" checked> Autoplay</label>
+    <label style="display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer"><input type="radio" name="playback" id="modeStep"> Step by step</label>
+    <button type="button" id="btnNextStep" disabled style="margin-left:0.5rem">Next step</button>
+  </div>
+  <div id="log">Operations and pseudocode appear here.</div>
+  <div class="trie-viz" id="viz"></div>
+
+  <script>
+    let root = { children: {}, end: false };
+    const STEP = 900;
+    let animating = false;
+    let nodeId = 0;
+    function getAutoplay() { return document.getElementById('modeAutoplay').checked; }
+    function setBtns(on) { animating = !on; document.querySelectorAll('.controls button:not(#btnClear):not(#btnNextStep)').forEach(b => { b.disabled = !on; }); const nb = document.getElementById('btnNextStep'); if (nb) nb.disabled = on || getAutoplay(); }
+    function waitForStep() { return new Promise(r => { window._resolveStep = r; }); }
+    function step() { return getAutoplay() ? new Promise(r => setTimeout(r, STEP)) : waitForStep(); }
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function showPseudo(lines, active, msg) { document.getElementById('log').innerHTML = (lines && lines.length ? lines.map((l,i) => '<span class="pseudo-line' + (i===active?' active':'') + '">' + esc(l) + '</span>').join('') : '') + (msg ? '<span class="message">' + esc(msg) + '</span>' : ''); }
+    function assignIds(n, prefix) {
+      n._id = prefix || 'root';
+      Object.keys(n.children).sort().forEach((c, i) => assignIds(n.children[c], prefix ? prefix + '-' + c : c));
+    }
+    function render(highlightPath) {
+      assignIds(root);
+      const v = document.getElementById('viz');
+      v.innerHTML = '';
+      function addNode(n, path, depth) {
+        const isRoot = path === '';
+        const key = isRoot ? 'root' : path.slice(-1);
+        const id = n._id;
+        const el = document.createElement('span');
+        el.className = 'trie-node' + (highlightPath && path === highlightPath ? ' current' : '') + (n.end ? ' end' : '');
+        el.dataset.path = path;
+        el.innerHTML = (isRoot ? '<span class="char">∅</span>' : '<span class="char">' + esc(key) + '</span>') + (n.end ? '<span class="end-marker">★</span>' : '');
+        v.appendChild(el);
+        Object.keys(n.children).sort().forEach(ch => addNode(n.children[ch], path + ch, depth + 1));
+      }
+      addNode(root, '', 0);
+      if (!root._id && Object.keys(root.children).length === 0) v.appendChild(document.createTextNode('(empty)'));
+    }
+    const P_INSERT = ['// Insert word', 'current = root', 'for each char c in word:', '  if c not in current.children: current.children[c] = new node', '  current = current.children[c]', 'current.end = true'];
+    async function insert() {
+      const word = document.getElementById('word').value.trim().toLowerCase().replace(/[^a-z]/g, '');
+      if (!word) { showPseudo([], -1, 'Enter a word (a–z).'); return; }
+      setBtns(false);
+      let current = root;
+      let path = '';
+      showPseudo(P_INSERT, 0, 'Insert "' + word + '"'); render(path);
+      await step();
+      showPseudo(P_INSERT, 1, 'current = root'); render('');
+      await step();
+      for (let i = 0; i < word.length; i++) {
+        const c = word[i];
+        showPseudo(P_INSERT, 2, 'char "' + c + '"'); render(path);
+        await step();
+        if (!current.children[c]) {
+          showPseudo(P_INSERT, 3, 'No child "' + c + '" → create node'); current.children[c] = { children: {}, end: false };
+          path += c; render(path); await step();
+        }
+        current = current.children[c]; path += c;
+        showPseudo(P_INSERT, 4, 'current = current.children["' + c + '"]'); render(path);
+        await step();
+      }
+      showPseudo(P_INSERT, 5, 'Mark end of word'); current.end = true;
+      render(path);
+      setBtns(true);
+    }
+    const P_SEARCH = ['// Search word', 'current = root', 'for each char c in word:', '  if c not in current.children: return false', '  current = current.children[c]', 'return current.end'];
+    async function search() {
+      const word = document.getElementById('word').value.trim().toLowerCase().replace(/[^a-z]/g, '');
+      if (!word) { showPseudo([], -1, 'Enter a word.'); return; }
+      setBtns(false);
+      let current = root, path = '';
+      showPseudo(P_SEARCH, 0, 'Search "' + word + '"'); render('');
+      await step();
+      for (let i = 0; i < word.length; i++) {
+        const c = word[i];
+        showPseudo(P_SEARCH, 2, 'char "' + c + '"'); render(path);
+        await step();
+        if (!current.children[c]) { showPseudo(P_SEARCH, 3, 'No child → return false'); setBtns(true); return; }
+        current = current.children[c]; path += c;
+        showPseudo(P_SEARCH, 4, 'current = current.children["' + c + '"]'); render(path);
+        await step();
+      }
+      showPseudo(P_SEARCH, 5, 'return current.end = ' + current.end); render(path);
+      setBtns(true);
+    }
+    async function startsWith() {
+      const word = document.getElementById('word').value.trim().toLowerCase().replace(/[^a-z]/g, '');
+      if (!word) { showPseudo([], -1, 'Enter a prefix.'); return; }
+      setBtns(false);
+      let current = root, path = '';
+      showPseudo(['// StartsWith(prefix): follow path; return true if reached'], 0, 'StartsWith "' + word + '"'); render('');
+      await step();
+      for (let i = 0; i < word.length; i++) {
+        const c = word[i];
+        if (!current.children[c]) { showPseudo([], 0, 'No child → return false'); setBtns(true); return; }
+        current = current.children[c]; path += c;
+        render(path); await step();
+      }
+      showPseudo([], 0, 'Prefix found. return true'); setBtns(true);
+    }
+    function clearAll() { root = { children: {}, end: false }; render(); showPseudo([], -1, 'Cleared.'); }
+    document.getElementById('modeAutoplay').addEventListener('change', function() { if (document.getElementById('btnNextStep')) document.getElementById('btnNextStep').disabled = true; });
+    document.getElementById('modeStep').addEventListener('change', function() { if (animating) document.getElementById('btnNextStep').disabled = false; });
+    document.getElementById('btnNextStep').addEventListener('click', function() { if (window._resolveStep) { window._resolveStep(); window._resolveStep = null; } });
+    render();
+  </script>
+</body>
+</html>

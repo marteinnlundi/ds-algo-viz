@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quick sort — Visualization</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #1a1b26; color: #c0caf5; padding: 2rem; }
+    h1 { color: #7aa2f7; } .subtitle { color: #565f89; margin-bottom: 1rem; }
+    .controls { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem; align-items: center; }
+    input, button { padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid #414868; background: #24283b; color: #c0caf5; font-size: 1rem; }
+    button { cursor: pointer; background: #7aa2f7; color: #1a1b26; border: none; font-weight: 600; }
+    button:hover:not(:disabled) { background: #89b4fa; } button:disabled { opacity: 0.6; }
+    button.danger { background: #f7768e; }
+    #log { background: #24283b; border-radius: 8px; padding: 1rem; min-height: 90px; margin-bottom: 1rem; border-left: 4px solid #7aa2f7; font-family: Consolas, monospace; white-space: pre-wrap; }
+    #log .pseudo-line { display: block; padding: 2px 6px; margin: 2px 0; border-radius: 4px; }
+    #log .pseudo-line.active { background: #364a7c; color: #7dcfff; }
+    #log .pseudo-line.active::before { content: '▶ '; color: #9ece6a; }
+    #log .message { margin-top: 8px; padding-top: 8px; border-top: 1px solid #414868; color: #a9b1d6; }
+    .viz { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; min-height: 100px; padding: 1rem; background: #24283b; border-radius: 12px; }
+    .cell { width: 48px; height: 40px; display: inline-flex; align-items: center; justify-content: center; background: #414868; border-radius: 8px; border: 2px solid #565f89; font-weight: 700; color: #7dcfff; transition: all 0.2s; font-size: 0.9rem; }
+    .cell.pivot { border-color: #f7768e; box-shadow: 0 0 12px rgba(247,118,142,0.5); background: #3d2a35; }
+    .cell.current { border-color: #7dcfff; box-shadow: 0 0 12px rgba(125,207,255,0.6); background: #364a7c; }
+    .cell.partitioned { border-color: #9ece6a; opacity: 0.9; }
+    .label { background: #9ece6a; color: #1a1b26; padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.8rem; font-weight: 700; margin-right: 0.5rem; }
+  </style>
+</head>
+<body>
+  <h1>Quick sort</h1>
+  <p class="subtitle">Step-by-step: pivot, partition, then recurse; pseudocode shown for each step.</p>
+  <div class="controls">
+    <button onclick="sort()">Sort</button>
+    <button class="danger" id="btnClear" onclick="clearAll()">Clear</button>
+  </div>
+  <div class="controls">
+    <span style="color:#565f89">Size:</span>
+    <input type="number" id="rndSize" min="2" max="14" value="8" style="width:55px">
+    <button onclick="randomArr()">Generate array</button>
+  </div>
+  <div class="controls" style="border-top:1px solid #414868;padding-top:0.75rem;margin-top:0.25rem;">
+    <span style="color:#565f89">Playback:</span>
+    <label style="display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer"><input type="radio" name="playback" id="modeAutoplay" checked> Autoplay</label>
+    <label style="display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer"><input type="radio" name="playback" id="modeStep"> Step by step</label>
+    <button type="button" id="btnNextStep" disabled style="margin-left:0.5rem">Next step</button>
+  </div>
+  <div id="log">Operations and pseudocode appear here.</div>
+  <div class="viz" id="viz"></div>
+
+  <script>
+    let arr = [];
+    const STEP = 800;
+    let animating = false;
+    function getAutoplay() { return document.getElementById('modeAutoplay').checked; }
+    function setBtns(on) { animating = !on; document.querySelectorAll('.controls button:not(#btnClear):not(#btnNextStep)').forEach(b => { b.disabled = !on; }); const nb = document.getElementById('btnNextStep'); if (nb) nb.disabled = on || getAutoplay(); }
+    function waitForStep() { return new Promise(r => { window._resolveStep = r; }); }
+    function step() { return getAutoplay() ? new Promise(r => setTimeout(r, STEP)) : waitForStep(); }
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function showPseudo(lines, active, msg) { document.getElementById('log').innerHTML = (lines && lines.length ? lines.map((l,i) => '<span class="pseudo-line' + (i===active?' active':'') + '">' + esc(l) + '</span>').join('') : '') + (msg ? '<span class="message">' + esc(msg) + '</span>' : ''); }
+    function render(pivotIdx, iIdx, jIdx, partitionedLow, partitionedHigh) {
+      const v = document.getElementById('viz'); v.innerHTML = '';
+      v.appendChild(Object.assign(document.createElement('span'), { className: 'label', textContent: 'arr' }));
+      for (let k = 0; k < arr.length; k++) {
+        const c = document.createElement('div');
+        c.className = 'cell';
+        if (pivotIdx >= 0 && k === pivotIdx) c.classList.add('pivot');
+        else if (iIdx >= 0 && k === iIdx) c.classList.add('current');
+        else if (jIdx >= 0 && k === jIdx) c.classList.add('current');
+        else if (partitionedLow >= 0 && partitionedHigh >= 0 && k >= partitionedLow && k <= partitionedHigh) c.classList.add('partitioned');
+        c.textContent = arr[k]; v.appendChild(c);
+      }
+      if (!arr.length) v.appendChild(document.createTextNode('(empty)'));
+    }
+    const P = ['// Quick sort — O(n log n) avg, recursive', 'if low >= high: return', 'pivot = arr[high], i = low - 1', 'for j = low to high-1: if arr[j] <= pivot: i++; swap arr[i], arr[j]', 'swap arr[i+1], arr[high]; pi = i+1', 'quicksort(low, pi-1); quicksort(pi+1, high)'];
+    async function partition(low, high) {
+      const pivot = arr[high];
+      let i = low - 1;
+      showPseudo(P, 2, 'pivot = arr[' + high + '] = ' + pivot + ', i = ' + i); render(high, low - 1, low, -1, -1);
+      await step();
+      for (let j = low; j < high; j++) {
+        showPseudo(P, 3, 'j = ' + j + '. arr[j] <= pivot? ' + (arr[j] <= pivot ? 'Yes → swap' : 'No')); render(high, i, j, -1, -1);
+        await step();
+        if (arr[j] <= pivot) {
+          i++;
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+          render(high, i, j, -1, -1);
+          await step();
+        }
+      }
+      [arr[i + 1], arr[high]] = [arr[high], arr[i + 1]];
+      showPseudo(P, 4, 'Pivot in place at index ' + (i + 1)); render(-1, -1, -1, low, high);
+      await step();
+      return i + 1;
+    }
+    async function quicksort(low, high) {
+      if (low >= high) return;
+      showPseudo(P, 1, 'Range [' + low + ', ' + high + '].'); render(-1, -1, -1, low, high);
+      await step();
+      const pi = await partition(low, high);
+      showPseudo(P, 5, 'Quicksort(' + low + ', ' + (pi - 1) + '); Quicksort(' + (pi + 1) + ', ' + high + ')'); render(-1, -1, -1, low, high);
+      await step();
+      await quicksort(low, pi - 1);
+      await quicksort(pi + 1, high);
+    }
+    async function sort() {
+      if (arr.length < 2) { showPseudo([], -1, 'Generate array first.'); return; }
+      setBtns(false);
+      showPseudo(P, 0, 'Quick sort (pivot and partition, recursive).'); render();
+      await step();
+      await quicksort(0, arr.length - 1);
+      showPseudo([], -1, 'Done. Array sorted.'); render(-1, -1, -1, 0, arr.length - 1);
+      setBtns(true);
+    }
+    function clearAll() { arr = []; render(); showPseudo([], -1, 'Cleared.'); }
+    function randomArr() {
+      const n = Math.min(14, Math.max(2, parseInt(document.getElementById('rndSize').value, 10) || 8));
+      arr = []; for (let i = 0; i < n; i++) arr.push(Math.floor(Math.random() * 99) + 1);
+      render(); showPseudo([], -1, 'Array of ' + n + ' elements.');
+    }
+    document.getElementById('modeAutoplay').addEventListener('change', function() { if (document.getElementById('btnNextStep')) document.getElementById('btnNextStep').disabled = true; });
+    document.getElementById('modeStep').addEventListener('change', function() { if (animating) document.getElementById('btnNextStep').disabled = false; });
+    document.getElementById('btnNextStep').addEventListener('click', function() { if (window._resolveStep) { window._resolveStep(); window._resolveStep = null; } });
+    render();
+  </script>
+</body>
+</html>

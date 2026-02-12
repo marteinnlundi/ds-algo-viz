@@ -1,0 +1,180 @@
+/**
+ * Styles for the hub (category list and grid).
+ * Use with common.css.
+ */
+
+body {
+  padding: 0;
+}
+
+.header {
+  padding: 1rem 2rem;
+  background: #16161e;
+  border-bottom: 1px solid #414868;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: #7aa2f7;
+}
+
+.back-btn,
+.back-categories-btn {
+  display: none;
+  padding: 0.5rem 1rem;
+  background: #414868;
+  color: #c0caf5;
+  border: 1px solid #565f89;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.back-btn:hover,
+.back-categories-btn:hover {
+  background: #565f89;
+}
+
+.back-btn.visible,
+.back-categories-btn.visible {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.back-categories-btn {
+  border: 1px solid #565f89;
+}
+
+#home {
+  padding: 2rem;
+}
+
+#home h1 {
+  color: #7aa2f7;
+  margin-top: 0;
+}
+
+.subtitle {
+  margin-bottom: 2rem;
+}
+
+/* Category list */
+#categories.visible {
+  display: block;
+}
+
+#categories.hidden {
+  display: none;
+}
+
+.categories-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.category-card {
+  display: block;
+  padding: 1.5rem;
+  background: #24283b;
+  border-radius: 12px;
+  color: #c0caf5;
+  text-decoration: none;
+  border: 2px solid #414868;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  cursor: pointer;
+  text-align: left;
+}
+
+.category-card:hover {
+  border-color: #7aa2f7;
+  box-shadow: 0 0 12px rgba(122, 162, 247, 0.3);
+}
+
+.category-card h2 {
+  margin: 0 0 0.35rem 0;
+  font-size: 1.15rem;
+  color: #7dcfff;
+}
+
+.category-card p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #565f89;
+}
+
+.category-card .count {
+  font-size: 0.8rem;
+  color: #7aa2f7;
+  margin-top: 0.5rem;
+}
+
+/* Grid of visualization cards */
+#gridWrap {
+  display: none;
+}
+
+.grid {
+  display: none;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.grid.visible {
+  display: grid;
+}
+
+.card {
+  display: block;
+  padding: 1.25rem;
+  background: #24283b;
+  border-radius: 12px;
+  color: #c0caf5;
+  text-decoration: none;
+  border: 2px solid #414868;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  cursor: pointer;
+  text-align: left;
+}
+
+.card:hover {
+  border-color: #7aa2f7;
+  box-shadow: 0 0 12px rgba(122, 162, 247, 0.3);
+}
+
+.card h2 {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.1rem;
+  color: #7dcfff;
+}
+
+.card p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #565f89;
+}
+
+/* Viewer (iframe) */
+#viewer {
+  display: none;
+  position: fixed;
+  inset: 0;
+  top: 53px;
+}
+
+#viewer.visible {
+  display: block;
+}
+
+#viewer iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+}

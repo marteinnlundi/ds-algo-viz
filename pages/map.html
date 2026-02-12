@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Map / Dictionary — Visualization</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #1a1b26; color: #c0caf5; padding: 2rem; }
+    h1 { color: #7aa2f7; } .subtitle { color: #565f89; margin-bottom: 1rem; }
+    .controls { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem; align-items: center; }
+    input, button { padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid #414868; background: #24283b; color: #c0caf5; font-size: 1rem; }
+    button { cursor: pointer; background: #7aa2f7; color: #1a1b26; border: none; font-weight: 600; }
+    button:hover:not(:disabled) { background: #89b4fa; } button:disabled { opacity: 0.6; }
+    button.danger { background: #f7768e; }
+    #log { background: #24283b; border-radius: 8px; padding: 1rem; min-height: 90px; margin-bottom: 1rem; border-left: 4px solid #7aa2f7; font-family: Consolas, monospace; white-space: pre-wrap; }
+    #log .pseudo-line { display: block; padding: 2px 6px; margin: 2px 0; border-radius: 4px; }
+    #log .pseudo-line.active { background: #364a7c; color: #7dcfff; }
+    #log .pseudo-line.active::before { content: '▶ '; color: #9ece6a; }
+    #log .message { margin-top: 8px; padding-top: 8px; border-top: 1px solid #414868; color: #a9b1d6; }
+    .viz { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; min-height: 80px; padding: 1rem; background: #24283b; border-radius: 12px; }
+    .pair { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.4rem 0.75rem; background: #414868; border-radius: 8px; border: 2px solid #565f89; font-size: 0.95rem; transition: all 0.2s; }
+    .pair .k { color: #f7768e; font-weight: 700; }
+    .pair .v { color: #7dcfff; }
+    .pair.current { border-color: #7dcfff; box-shadow: 0 0 12px rgba(125,207,255,0.5); background: #364a7c; }
+    .pair.new { border-color: #9ece6a; }
+  </style>
+</head>
+<body>
+  <h1>Map / Dictionary (key → value)</h1>
+  <p class="subtitle">Step-by-step: current pair highlighted and pseudocode shown for each step.</p>
+  <div class="controls">
+    <input type="text" id="key" placeholder="Key" style="width:90px">
+    <input type="text" id="val" placeholder="Value" style="width:90px">
+    <button onclick="put()">Put</button>
+    <button onclick="get()">Get</button>
+    <button onclick="remove()">Remove</button>
+    <button class="danger" id="btnClear" onclick="clearMap()">Clear</button>
+  </div>
+  <div class="controls">
+    <span style="color:#565f89">Random pairs:</span>
+    <input type="number" id="rndSize" min="1" max="10" value="4" style="width:50px">
+    <button onclick="randomMap()">Generate</button>
+  </div>
+  <div class="controls" style="border-top:1px solid #414868;padding-top:0.75rem;margin-top:0.25rem;">
+    <span style="color:#565f89">Playback:</span>
+    <label style="display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer"><input type="radio" name="playback" id="modeAutoplay" checked> Autoplay</label>
+    <label style="display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer"><input type="radio" name="playback" id="modeStep"> Step by step</label>
+    <button type="button" id="btnNextStep" disabled style="margin-left:0.5rem">Next step</button>
+  </div>
+  <div id="log">Operations and pseudocode appear here.</div>
+  <div class="viz" id="viz"></div>
+
+  <script>
+    let map = [];
+    const STEP = 900;
+    let animating = false;
+    function getAutoplay() { return document.getElementById('modeAutoplay').checked; }
+    function setBtns(on) { animating = !on; document.querySelectorAll('.controls button:not(#btnClear):not(#btnNextStep)').forEach(b => { b.disabled = !on; }); const nb = document.getElementById('btnNextStep'); if (nb) nb.disabled = on || getAutoplay(); }
+    function waitForStep() { return new Promise(r => { window._resolveStep = r; }); }
+    function step() { return getAutoplay() ? new Promise(r => setTimeout(r, STEP)) : waitForStep(); }
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+    document.getElementById('modeAutoplay').addEventListener('change', function() { if (document.getElementById('btnNextStep')) document.getElementById('btnNextStep').disabled = true; });
+    document.getElementById('modeStep').addEventListener('change', function() { if (animating) document.getElementById('btnNextStep').disabled = false; });
+    document.getElementById('btnNextStep').addEventListener('click', function() { if (window._resolveStep) { window._resolveStep(); window._resolveStep = null; } });
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function showPseudo(lines, active, msg) {
+      document.getElementById('log').innerHTML = (lines && lines.length ? lines.map((l,i) => '<span class="pseudo-line' + (i===active?' active':'') + '">' + esc(l) + '</span>').join('') : '') + (msg ? '<span class="message">' + esc(msg) + '</span>' : '');
+    }
+    function findKey(k) { return map.findIndex(p => p.key === k); }
+    function render(highlightKey = null, newKey = null) {
+      const v = document.getElementById('viz');
+      v.innerHTML = '';
+      map.forEach(p => {
+        const el = document.createElement('span');
+        el.className = 'pair';
+        el.dataset.key = p.key;
+        el.innerHTML = '<span class="k">' + esc(p.key) + '</span><span>→</span><span class="v">' + esc(String(p.value)) + '</span>';
+        if (highlightKey !== null && p.key === highlightKey) el.classList.add('current');
+        if (newKey !== null && p.key === newKey) el.classList.add('new');
+        v.appendChild(el);
+      });
+      if (map.length === 0) v.appendChild(document.createTextNode('(empty)'));
+    }
+    const P_PUT = [
+      '// Put — update if key exists, else append (list-based map), O(n)',
+      'for each pair in map:',
+      '  if pair.key == key: pair.value = value; return',
+      'map.append((key, value))   // new pair'
+    ];
+    async function put() {
+      const k = document.getElementById('key').value.trim();
+      const val = document.getElementById('val').value.trim();
+      if (!k) { showPseudo([], -1, 'Enter a key.'); return; }
+      setBtns(false);
+      showPseudo(P_PUT, 0, 'Put ' + k + ' → ' + val + ': scan for existing key.'); render();
+      await step();
+      for (let i = 0; i < map.length; i++) {
+        showPseudo(P_PUT, 1, 'Check pair: ' + map[i].key + ' == "' + k + '"?'); render(map[i].key);
+        await step();
+        showPseudo(P_PUT, 2, map[i].key === k ? 'Yes → update value to ' + val + '; return' : 'No → next pair.');
+        if (map[i].key === k) { map[i].value = val; await step(); render(k); setBtns(true); return; }
+        await step();
+      }
+      showPseudo(P_PUT, 3, 'Key not found → append (' + k + ', ' + val + ')'); render();
+      await step();
+      map.push({ key: k, value: val }); render(null, k);
+      setBtns(true);
+    }
+    const P_GET = [
+      '// Get — linear search by key, O(n)',
+      'for each pair in map:',
+      '  if pair.key == key: return pair.value',
+      'return null   // not found'
+    ];
+    async function get() {
+      const k = document.getElementById('key').value.trim();
+      if (!k) { showPseudo([], -1, 'Enter a key.'); return; }
+      setBtns(false);
+      showPseudo(P_GET, 0, 'Get value for key "' + k + '": scan pairs.'); render();
+      await step();
+      for (let i = 0; i < map.length; i++) {
+        showPseudo(P_GET, 1, 'pair.key == "' + k + '"? (' + map[i].key + ')'); render(map[i].key);
+        await step();
+        showPseudo(P_GET, 2, map[i].key === k ? 'Yes → return ' + map[i].value : 'No → next.');
+        if (map[i].key === k) { setBtns(true); return; }
+        await step();
+      }
+      showPseudo(P_GET, 3, 'Key not found. return null'); setBtns(true);
+    }
+    const P_REMOVE = [
+      '// Remove — find key, then remove pair, O(n)',
+      'for each index i: if map[i].key == key: break',
+      'if found: remove map[i]',
+      '// else: key not in map'
+    ];
+    async function remove() {
+      const k = document.getElementById('key').value.trim();
+      if (!k) { showPseudo([], -1, 'Enter a key.'); return; }
+      setBtns(false);
+      showPseudo(P_REMOVE, 0, 'Remove key "' + k + '": find index.'); render();
+      await step();
+      let i = -1;
+      for (let j = 0; j < map.length; j++) {
+        render(map[j].key);
+        await step();
+        if (map[j].key === k) { i = j; break; }
+      }
+      showPseudo(P_REMOVE, 1, i >= 0 ? 'Found at index ' + i + '.' : 'Key not found.'); if (i >= 0) render(k);
+      await step();
+      if (i >= 0) { showPseudo(P_REMOVE, 2, 'Remove pair at index ' + i + '.'); map.splice(i, 1); }
+      else showPseudo(P_REMOVE, 2, 'Nothing to remove.');
+      render(); setBtns(true);
+    }
+    function clearMap() { map = []; render(); showPseudo([], -1, 'Map cleared.'); }
+    function randomMap() {
+      const keys = ['a','b','c','d','e','f','g','h','i','j'];
+      const n = Math.min(10, Math.max(1, parseInt(document.getElementById('rndSize').value, 10) || 4));
+      map = []; for (let i = 0; i < n; i++) map.push({ key: keys[i], value: Math.floor(Math.random() * 100) });
+      render(); showPseudo([], -1, 'Random map with ' + n + ' pairs.');
+    }
+    render();
+  </script>
+</body>
+</html>

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Queue — Visualization</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #1a1b26; color: #c0caf5; padding: 2rem; }
+    h1 { color: #7aa2f7; } .subtitle { color: #565f89; margin-bottom: 1rem; }
+    .controls { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem; align-items: center; }
+    input, button { padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid #414868; background: #24283b; color: #c0caf5; font-size: 1rem; }
+    button { cursor: pointer; background: #7aa2f7; color: #1a1b26; border: none; font-weight: 600; }
+    button:hover:not(:disabled) { background: #89b4fa; } button:disabled { opacity: 0.6; }
+    button.danger { background: #f7768e; }
+    #log { background: #24283b; border-radius: 8px; padding: 1rem; min-height: 90px; margin-bottom: 1rem; border-left: 4px solid #7aa2f7; font-family: Consolas, monospace; white-space: pre-wrap; }
+    #log .pseudo-line { display: block; padding: 2px 6px; margin: 2px 0; border-radius: 4px; }
+    #log .pseudo-line.active { background: #364a7c; color: #7dcfff; }
+    #log .pseudo-line.active::before { content: '▶ '; color: #9ece6a; }
+    #log .message { margin-top: 8px; padding-top: 8px; border-top: 1px solid #414868; color: #a9b1d6; }
+    .viz { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; min-height: 100px; padding: 1rem; background: #24283b; border-radius: 12px; }
+    .cell { padding: 0.5rem 1rem; background: #414868; border-radius: 8px; border: 2px solid #565f89; font-weight: 700; color: #7dcfff; transition: all 0.2s; }
+    .cell.front { border-color: #9ece6a; box-shadow: 0 0 10px rgba(158,206,106,0.5); }
+    .cell.back { border-color: #f7768e; box-shadow: 0 0 10px rgba(247,118,142,0.5); }
+    .cell.new { border-color: #9ece6a; }
+    .label { background: #9ece6a; color: #1a1b26; padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.8rem; font-weight: 700; margin-right: 0.5rem; }
+    .label.rear { background: #f7768e; margin-left: 0.5rem; }
+  </style>
+</head>
+<body>
+  <h1>Queue (FIFO)</h1>
+  <p class="subtitle">Step-by-step: front/rear highlighted and pseudocode shown for each step.</p>
+  <div class="controls">
+    <input type="text" id="val" placeholder="Value" style="width:100px">
+    <button onclick="enqueue()">Enqueue</button>
+    <button onclick="dequeue()">Dequeue</button>
+    <button onclick="peek()">Peek</button>
+    <button class="danger" id="btnClear" onclick="clearQueue()">Clear</button>
+  </div>
+  <div class="controls">
+    <span style="color:#565f89">Random:</span>
+    <input type="number" id="rndSize" min="1" max="12" value="5" style="width:50px">
+    <button onclick="randomQueue()">Generate</button>
+  </div>
+  <div class="controls" style="border-top:1px solid #414868;padding-top:0.75rem;margin-top:0.25rem;">
+    <span style="color:#565f89">Playback:</span>
+    <label style="display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer"><input type="radio" name="playback" id="modeAutoplay" checked> Autoplay</label>
+    <label style="display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer"><input type="radio" name="playback" id="modeStep"> Step by step</label>
+    <button type="button" id="btnNextStep" disabled style="margin-left:0.5rem">Next step</button>
+  </div>
+  <div id="log">Operations and pseudocode appear here.</div>
+  <div class="viz" id="viz"></div>
+
+  <script>
+    let queue = [];
+    const STEP = 1000;
+    let animating = false;
+    function getAutoplay() { return document.getElementById('modeAutoplay').checked; }
+    function setBtns(on) { animating = !on; document.querySelectorAll('.controls button:not(#btnClear):not(#btnNextStep)').forEach(b => { b.disabled = !on; }); const nb = document.getElementById('btnNextStep'); if (nb) nb.disabled = on || getAutoplay(); }
+    function waitForStep() { return new Promise(r => { window._resolveStep = r; }); }
+    function step() { return getAutoplay() ? new Promise(r => setTimeout(r, STEP)) : waitForStep(); }
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+    document.getElementById('modeAutoplay').addEventListener('change', function() { if (document.getElementById('btnNextStep')) document.getElementById('btnNextStep').disabled = true; });
+    document.getElementById('modeStep').addEventListener('change', function() { if (animating) document.getElementById('btnNextStep').disabled = false; });
+    document.getElementById('btnNextStep').addEventListener('click', function() { if (window._resolveStep) { window._resolveStep(); window._resolveStep = null; } });
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function showPseudo(lines, active, msg) {
+      document.getElementById('log').innerHTML = (lines && lines.length ? lines.map((l,i) => '<span class="pseudo-line' + (i===active?' active':'') + '">' + esc(l) + '</span>').join('') : '') + (msg ? '<span class="message">' + esc(msg) + '</span>' : '');
+    }
+    function render(highlightFront = false, highlightRear = false, newItem = false) {
+      const v = document.getElementById('viz');
+      v.innerHTML = '<span class="label">front</span>';
+      queue.forEach((x, i) => {
+        const c = document.createElement('span');
+        c.className = 'cell';
+        if (highlightFront && i === 0) c.classList.add('front');
+        if (highlightRear && i === queue.length - 1) c.classList.add('back');
+        if (newItem && i === queue.length - 1) c.classList.add('new');
+        c.textContent = x;
+        v.appendChild(c);
+      });
+      v.appendChild(Object.assign(document.createElement('span'), { className: 'label rear', textContent: 'rear' }));
+    }
+    const P_ENQUEUE = [
+      '// Enqueue — add at rear (FIFO), O(1)',
+      'queue.append(value)   // add at back',
+      '// rear is now the last element'
+    ];
+    async function enqueue() {
+      const val = document.getElementById('val').value.trim();
+      if (!val) { showPseudo([], -1, 'Enter a value.'); return; }
+      const x = isNaN(Number(val)) ? val : Number(val);
+      document.getElementById('val').value = '';
+      setBtns(false);
+      showPseudo(P_ENQUEUE, 0, 'Enqueue ' + x + ' at rear.'); render(false, false);
+      await step();
+      showPseudo(P_ENQUEUE, 1, 'queue.append(' + x + ')'); render(false, false);
+      await step();
+      queue.push(x);
+      showPseudo(P_ENQUEUE, 2, 'Rear is now ' + x + '.'); render(false, true, true);
+      setBtns(true);
+    }
+    const P_DEQUEUE = [
+      '// Dequeue — remove from front (FIFO), O(1) with two pointers, O(n) with array shift',
+      'if queue is empty: return null',
+      'front_value = queue[0]',
+      'remove first element',
+      'return front_value'
+    ];
+    async function dequeue() {
+      setBtns(false);
+      showPseudo(P_DEQUEUE, 0, 'Dequeue: remove from front.'); render(true, queue.length > 1);
+      await step();
+      if (queue.length === 0) { showPseudo(P_DEQUEUE, 0, 'Queue empty → return null.'); setBtns(true); return; }
+      showPseudo(P_DEQUEUE, 1, 'front_value = queue[0] = ' + queue[0]); render(true);
+      await step();
+      showPseudo(P_DEQUEUE, 2, 'Save front value.'); await step();
+      const x = queue.shift();
+      showPseudo(P_DEQUEUE, 3, 'Remove first element.'); render();
+      await step();
+      showPseudo(P_DEQUEUE, 4, 'return ' + x + '.'); setBtns(true);
+    }
+    const P_PEEK = [
+      '// Peek — view front without removing, O(1)',
+      'if queue is empty: return null',
+      'return queue[0]   // front'
+    ];
+    async function peek() {
+      setBtns(false);
+      showPseudo(P_PEEK, 0, 'Peek at front (no removal).'); render(true);
+      await step();
+      showPseudo(P_PEEK, 1, queue.length === 0 ? 'Queue empty → return null.' : 'Not empty.');
+      await step();
+      showPseudo(P_PEEK, 2, queue.length ? 'return queue[0] = ' + queue[0] : 'return null'); setBtns(true);
+    }
+    function clearQueue() { queue = []; render(); showPseudo([], -1, 'Queue cleared.'); }
+    function randomQueue() {
+      const n = Math.min(12, Math.max(1, parseInt(document.getElementById('rndSize').value, 10) || 5));
+      queue = []; for (let i = 0; i < n; i++) queue.push(Math.floor(Math.random() * 99) + 1);
+      render(); showPseudo([], -1, 'Queue of ' + n + ' (front=' + queue[0] + ', rear=' + queue[n-1] + ').');
+    }
+    render();
+  </script>
+</body>
+</html>

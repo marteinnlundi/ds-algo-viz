@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hash table — Linear probing</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #1a1b26; color: #c0caf5; padding: 2rem; }
+    h1 { color: #7aa2f7; } .subtitle { color: #565f89; margin-bottom: 1rem; }
+    .controls { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem; align-items: center; }
+    input, button { padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid #414868; background: #24283b; color: #c0caf5; font-size: 1rem; }
+    button { cursor: pointer; background: #7aa2f7; color: #1a1b26; border: none; font-weight: 600; }
+    button:hover:not(:disabled) { background: #89b4fa; } button:disabled { opacity: 0.6; }
+    button.danger { background: #f7768e; }
+    #log { background: #24283b; border-radius: 8px; padding: 1rem; min-height: 90px; margin-bottom: 1rem; border-left: 4px solid #7aa2f7; font-family: Consolas, monospace; white-space: pre-wrap; }
+    #log .pseudo-line { display: block; padding: 2px 6px; margin: 2px 0; border-radius: 4px; }
+    #log .pseudo-line.active { background: #364a7c; color: #7dcfff; }
+    #log .pseudo-line.active::before { content: '▶ '; color: #9ece6a; }
+    #log .message { margin-top: 8px; padding-top: 8px; border-top: 1px solid #414868; color: #a9b1d6; }
+    .viz { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 1rem; background: #24283b; border-radius: 12px; }
+    .slot { min-width: 70px; padding: 0.5rem; background: #1a1b26; border-radius: 8px; border: 2px solid #414868; text-align: center; }
+    .slot.highlight { border-color: #7dcfff; box-shadow: 0 0 12px rgba(125,207,255,0.4); }
+    .slot .idx { font-size: 0.75rem; color: #565f89; }
+    .slot .val { font-weight: 700; color: #7dcfff; }
+  </style>
+</head>
+<body>
+  <h1>Hash table — Linear probing</h1>
+  <p class="subtitle">Step-by-step: hash(key), then probe (i+1) on collision. Open addressing.</p>
+  <div class="controls">
+    <input type="text" id="val" placeholder="Key (number or word)" style="width:140px">
+    <button onclick="insert()">Insert</button>
+    <button onclick="search()">Search</button>
+    <button onclick="del()">Delete</button>
+    <button class="danger" id="btnClear" onclick="clearHash()">Clear</button>
+  </div>
+  <div class="controls">
+    <span style="color:#565f89">Capacity:</span>
+    <input type="number" id="capacity" min="5" max="16" value="10" style="width:55px">
+    <span style="color:#565f89">Random:</span>
+    <input type="number" id="rndSize" min="1" max="8" value="5" style="width:50px">
+    <button onclick="randomHash()">Generate</button>
+  </div>
+  <div class="controls" style="border-top:1px solid #414868;padding-top:0.75rem;margin-top:0.25rem;">
+    <span style="color:#565f89">Playback:</span>
+    <label style="display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer"><input type="radio" name="playback" id="modeAutoplay" checked> Autoplay</label>
+    <label style="display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer"><input type="radio" name="playback" id="modeStep"> Step by step</label>
+    <button type="button" id="btnNextStep" disabled style="margin-left:0.5rem">Next step</button>
+  </div>
+  <div id="log">Operations and pseudocode appear here.</div>
+  <div class="viz" id="viz"></div>
+
+  <script>
+    let table = [];
+    let cap = 10;
+    const STEP = 1000;
+    let animating = false;
+    function getAutoplay() { return document.getElementById('modeAutoplay').checked; }
+    function setBtns(on) { animating = !on; document.querySelectorAll('.controls button:not(#btnClear):not(#btnNextStep)').forEach(b => { b.disabled = !on; }); const nb = document.getElementById('btnNextStep'); if (nb) nb.disabled = on || getAutoplay(); }
+    function waitForStep() { return new Promise(r => { window._resolveStep = r; }); }
+    function step() { return getAutoplay() ? new Promise(r => setTimeout(r, STEP)) : waitForStep(); }
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function showPseudo(lines, active, msg) { document.getElementById('log').innerHTML = (lines && lines.length ? lines.map((l,i) => '<span class="pseudo-line' + (i===active?' active':'') + '">' + esc(l) + '</span>').join('') : '') + (msg ? '<span class="message">' + esc(msg) + '</span>' : ''); }
+    function hash(key) {
+      const s = String(key);
+      let h = 0;
+      for (let i = 0; i < s.length; i++) h = ((h << 5) - h) + s.charCodeAt(i) | 0;
+      return Math.abs(h) % cap;
+    }
+    function ensure() {
+      cap = Math.min(16, Math.max(5, parseInt(document.getElementById('capacity').value, 10) || 10));
+      while (table.length < cap) table.push(null);
+      table = table.slice(0, cap);
+    }
+    function render(highlightIdx) {
+      ensure();
+      const v = document.getElementById('viz'); v.innerHTML = '';
+      table.forEach((x, i) => {
+        const s = document.createElement('div');
+        s.className = 'slot' + (i === highlightIdx ? ' highlight' : '');
+        s.innerHTML = '<div class="idx">[' + i + ']</div><div class="val">' + (x !== null && x !== undefined ? esc(String(x)) : '—') + '</div>';
+        v.appendChild(s);
+      });
+    }
+    const P_INS = ['// Linear probing insert', 'i = hash(key)', 'while table[i] is not empty: i = (i+1) % cap', 'table[i] = key'];
+    async function insert() {
+      const key = document.getElementById('val').value.trim();
+      if (!key) { showPseudo([], -1, 'Enter a key.'); return; }
+      setBtns(false);
+      ensure();
+      let i = hash(key);
+      showPseudo(P_INS, 0, 'Insert "' + key + '". hash → ' + i + '.'); render(i);
+      await step();
+      let steps = 0;
+      while (table[i] !== null && table[i] !== undefined && steps < cap) {
+        showPseudo(P_INS, 1, 'Slot ' + i + ' occupied → probe (i+1) % ' + cap + '.'); render(i);
+        await step();
+        i = (i + 1) % cap;
+        steps++;
+      }
+      if (steps >= cap) { showPseudo([], -1, 'Table full.'); setBtns(true); return; }
+      showPseudo(P_INS, 2, 'table[' + i + '] = "' + key + '"'); table[i] = key;
+      render(i);
+      setBtns(true);
+    }
+    const P_SEARCH = ['// Linear probing search', 'i = hash(key)', 'while table[i] ≠ empty: if table[i] == key return i; i = (i+1) % cap', 'return -1'];
+    async function search() {
+      const key = document.getElementById('val').value.trim();
+      if (!key) { showPseudo([], -1, 'Enter a key.'); return; }
+      setBtns(false);
+      ensure();
+      let i = hash(key);
+      showPseudo(P_SEARCH, 0, 'Search "' + key + '". hash → ' + i + '.'); render(i);
+      await step();
+      let steps = 0;
+      while ((table[i] !== null && table[i] !== undefined) && steps < cap) {
+        showPseudo(P_SEARCH, 1, 'table[' + i + '] == "' + key + '"? ' + (table[i] === key ? 'Yes.' : 'No → probe.'));
+        render(i);
+        await step();
+        if (table[i] === key) { showPseudo(P_SEARCH, 1, 'Found at index ' + i + '.'); setBtns(true); return; }
+        i = (i + 1) % cap;
+        steps++;
+      }
+      showPseudo(P_SEARCH, 2, 'Not found.'); setBtns(true);
+    }
+    async function del() {
+      const key = document.getElementById('val').value.trim();
+      if (!key) { showPseudo([], -1, 'Enter a key.'); return; }
+      setBtns(false);
+      ensure();
+      let i = hash(key);
+      let steps = 0;
+      while ((table[i] !== null && table[i] !== undefined) && steps < cap) {
+        if (table[i] === key) { table[i] = null; showPseudo(['Delete: clear slot'], 0, 'Deleted at ' + i + '.'); render(i); setBtns(true); return; }
+        i = (i + 1) % cap;
+        steps++;
+      }
+      showPseudo([], -1, 'Key not found.'); setBtns(true);
+    }
+    function clearHash() { ensure(); table.fill(null); render(); showPseudo([], -1, 'Cleared.'); }
+    function randomHash() {
+      ensure(); table.fill(null);
+      const n = Math.min(8, Math.max(1, parseInt(document.getElementById('rndSize').value, 10) || 5));
+      const words = ['a','b','c','d','e','f','g','h'];
+      for (let i = 0; i < n; i++) {
+        const w = words[i % words.length] + (i >= words.length ? i : '');
+        let idx = hash(w);
+        while (table[idx] !== null && table[idx] !== undefined) idx = (idx + 1) % cap;
+        table[idx] = w;
+      }
+      render(); showPseudo([], -1, 'Random table with ' + n + ' keys (linear probing).');
+    }
+    document.getElementById('modeAutoplay').addEventListener('change', function() { if (document.getElementById('btnNextStep')) document.getElementById('btnNextStep').disabled = true; });
+    document.getElementById('modeStep').addEventListener('change', function() { if (animating) document.getElementById('btnNextStep').disabled = false; });
+    document.getElementById('btnNextStep').addEventListener('click', function() { if (window._resolveStep) { window._resolveStep(); window._resolveStep = null; } });
+    ensure(); render();
+  </script>
+</body>
+</html>

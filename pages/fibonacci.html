@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fibonacci — Recursive visualization</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #1a1b26; color: #c0caf5; padding: 2rem; }
+    h1 { color: #7aa2f7; } .subtitle { color: #565f89; margin-bottom: 1rem; }
+    .controls { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem; align-items: center; }
+    input, button { padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid #414868; background: #24283b; color: #c0caf5; font-size: 1rem; }
+    button { cursor: pointer; background: #7aa2f7; color: #1a1b26; border: none; font-weight: 600; }
+    button:hover:not(:disabled) { background: #89b4fa; } button:disabled { opacity: 0.6; }
+    #log { background: #24283b; border-radius: 8px; padding: 1rem; min-height: 90px; margin-bottom: 1rem; border-left: 4px solid #7aa2f7; font-family: Consolas, monospace; white-space: pre-wrap; }
+    #log .pseudo-line { display: block; padding: 2px 6px; margin: 2px 0; border-radius: 4px; }
+    #log .pseudo-line.active { background: #364a7c; color: #7dcfff; }
+    #log .pseudo-line.active::before { content: '▶ '; color: #9ece6a; }
+    #log .message { margin-top: 8px; padding-top: 8px; border-top: 1px solid #414868; color: #a9b1d6; }
+    .call-stack { padding: 1rem; background: #24283b; border-radius: 12px; min-height: 80px; font-family: Consolas, monospace; }
+    .call { padding: 0.35rem 0.75rem; margin: 4px 0; background: #414868; border-radius: 6px; border: 2px solid #565f89; display: inline-block; }
+    .call.current { border-color: #7dcfff; background: #364a7c; }
+    .call.returned { border-color: #9ece6a; opacity: 0.9; }
+  </style>
+</head>
+<body>
+  <h1>Fibonacci (recursive)</h1>
+  <p class="subtitle">Step-by-step: fib(n) = fib(n-1) + fib(n-2) with base fib(0)=0, fib(1)=1. Call stack shown.</p>
+  <div class="controls">
+    <input type="number" id="n" placeholder="n" min="0" max="10" value="5" style="width:70px">
+    <button onclick="run()">Run fib(n)</button>
+  </div>
+  <div class="controls" style="border-top:1px solid #414868;padding-top:0.75rem;margin-top:0.25rem;">
+    <span style="color:#565f89">Playback:</span>
+    <label style="display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer"><input type="radio" name="playback" id="modeAutoplay" checked> Autoplay</label>
+    <label style="display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer"><input type="radio" name="playback" id="modeStep"> Step by step</label>
+    <button type="button" id="btnNextStep" disabled style="margin-left:0.5rem">Next step</button>
+  </div>
+  <div id="log">Operations and pseudocode appear here.</div>
+  <div class="call-stack" id="stack">Call stack:</div>
+
+  <script>
+    const STEP = 1100;
+    let animating = false;
+    let callStack = [];
+    function getAutoplay() { return document.getElementById('modeAutoplay').checked; }
+    function setBtns(on) { animating = !on; document.querySelectorAll('.controls button:not(#btnNextStep)').forEach(b => { b.disabled = !on; }); document.getElementById('btnNextStep').disabled = on || getAutoplay(); }
+    function waitForStep() { return new Promise(r => { window._resolveStep = r; }); }
+    function step() { return getAutoplay() ? new Promise(r => setTimeout(r, STEP)) : waitForStep(); }
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function showPseudo(lines, active, msg) { document.getElementById('log').innerHTML = (lines && lines.length ? lines.map((l,i) => '<span class="pseudo-line' + (i===active?' active':'') + '">' + esc(l) + '</span>').join('') : '') + (msg ? '<span class="message">' + esc(msg) + '</span>' : ''); }
+    function renderStack(currentCall) {
+      const el = document.getElementById('stack');
+      el.innerHTML = 'Call stack: ';
+      callStack.forEach((c, i) => {
+        const s = document.createElement('span');
+        s.className = 'call' + (c === currentCall ? ' current' : (c.returned ? ' returned' : ''));
+        s.textContent = 'fib(' + c.n + ')' + (c.returned !== undefined ? ' → ' + c.returned : '');
+        el.appendChild(s);
+        if (i < callStack.length - 1) el.appendChild(document.createTextNode(' → '));
+      });
+    }
+    const P = ['// fib(n) — recursive', 'if n <= 1: return n', 'return fib(n-1) + fib(n-2)'];
+    async function fib(n) {
+      const frame = { n, returned: undefined };
+      callStack.push(frame);
+      renderStack(frame);
+      showPseudo(P, 0, 'fib(' + n + ') called.'); await step();
+      if (n <= 1) {
+        showPseudo(P, 1, 'n <= 1 → return ' + n + '.'); frame.returned = n;
+        renderStack(frame); await step();
+        callStack.pop();
+        return n;
+      }
+      showPseudo(P, 2, 'return fib(' + (n - 1) + ') + fib(' + (n - 2) + ') — call fib(' + (n - 1) + ') first.');
+      await step();
+      const a = await fib(n - 1);
+      showPseudo(P, 2, 'fib(' + (n - 1) + ') = ' + a + '. Now call fib(' + (n - 2) + ').');
+      renderStack(frame); await step();
+      const b = await fib(n - 2);
+      frame.returned = a + b;
+      showPseudo(P, 2, 'fib(' + (n - 2) + ') = ' + b + '. return ' + a + ' + ' + b + ' = ' + (a + b) + '.');
+      renderStack(frame); await step();
+      callStack.pop();
+      return a + b;
+    }
+    async function run() {
+      const n = parseInt(document.getElementById('n').value, 10);
+      if (isNaN(n) || n < 0 || n > 10) { showPseudo([], -1, 'Enter n between 0 and 10.'); return; }
+      setBtns(false);
+      callStack = [];
+      showPseudo(P, 0, 'Compute fib(' + n + ').'); renderStack(null);
+      await step();
+      const result = await fib(n);
+      showPseudo([], -1, 'fib(' + n + ') = ' + result + '.');
+      document.getElementById('stack').innerHTML = 'Call stack: (empty)';
+      setBtns(true);
+    }
+    document.getElementById('modeAutoplay').addEventListener('change', function() { if (document.getElementById('btnNextStep')) document.getElementById('btnNextStep').disabled = true; });
+    document.getElementById('modeStep').addEventListener('change', function() { if (animating) document.getElementById('btnNextStep').disabled = false; });
+    document.getElementById('btnNextStep').addEventListener('click', function() { if (window._resolveStep) { window._resolveStep(); window._resolveStep = null; } });
+  </script>
+</body>
+</html>

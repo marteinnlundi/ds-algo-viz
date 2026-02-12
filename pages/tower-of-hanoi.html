@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tower of Hanoi — Recursive</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #1a1b26; color: #c0caf5; padding: 2rem; }
+    h1 { color: #7aa2f7; } .subtitle { color: #565f89; margin-bottom: 1rem; }
+    .controls { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem; align-items: center; }
+    input, button { padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid #414868; background: #24283b; color: #c0caf5; font-size: 1rem; }
+    button { cursor: pointer; background: #7aa2f7; color: #1a1b26; border: none; font-weight: 600; }
+    button:hover:not(:disabled) { background: #89b4fa; } button:disabled { opacity: 0.6; }
+    #log { background: #24283b; border-radius: 8px; padding: 1rem; min-height: 90px; margin-bottom: 1rem; border-left: 4px solid #7aa2f7; font-family: Consolas, monospace; white-space: pre-wrap; }
+    #log .pseudo-line { display: block; padding: 2px 6px; margin: 2px 0; border-radius: 4px; }
+    #log .pseudo-line.active { background: #364a7c; color: #7dcfff; }
+    #log .pseudo-line.active::before { content: '▶ '; color: #9ece6a; }
+    #log .message { margin-top: 8px; padding-top: 8px; border-top: 1px solid #414868; color: #a9b1d6; }
+    .towers { display: flex; justify-content: center; gap: 4rem; padding: 1.5rem; background: #24283b; border-radius: 12px; min-height: 200px; align-items: flex-end; }
+    .tower { width: 100px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; border-bottom: 4px solid #565f89; min-height: 160px; }
+    .tower .peg { width: 8px; height: 120px; background: #565f89; border-radius: 4px; margin-bottom: -4px; }
+    .disk { height: 22px; border-radius: 4px; margin: 2px 0; font-size: 0.75rem; display: flex; align-items: center; justify-content: center; color: #1a1b26; font-weight: 700; }
+    .disk.moving { box-shadow: 0 0 16px rgba(125,207,255,0.8); }
+  </style>
+</head>
+<body>
+  <h1>Tower of Hanoi</h1>
+  <p class="subtitle">Step-by-step: move n disks from A to C using B. Recursive: move n-1 to B, move largest to C, move n-1 to C.</p>
+  <div class="controls">
+    <input type="number" id="n" placeholder="Disks" min="1" max="6" value="3" style="width:70px">
+    <button onclick="run()">Run</button>
+  </div>
+  <div class="controls" style="border-top:1px solid #414868;padding-top:0.75rem;margin-top:0.25rem;">
+    <span style="color:#565f89">Playback:</span>
+    <label style="display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer"><input type="radio" name="playback" id="modeAutoplay" checked> Autoplay</label>
+    <label style="display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer"><input type="radio" name="playback" id="modeStep"> Step by step</label>
+    <button type="button" id="btnNextStep" disabled style="margin-left:0.5rem">Next step</button>
+  </div>
+  <div id="log">Operations and pseudocode appear here.</div>
+  <div class="towers" id="towers"></div>
+
+  <script>
+    const STEP = 1200;
+    let animating = false;
+    let towers = [[], [], []];
+    const colors = ['#f7768e', '#ff9e64', '#e0af68', '#9ece6a', '#7dcfff', '#bb9af7'];
+    function getAutoplay() { return document.getElementById('modeAutoplay').checked; }
+    function setBtns(on) { animating = !on; document.querySelectorAll('.controls button:not(#btnNextStep)').forEach(b => { b.disabled = !on; }); document.getElementById('btnNextStep').disabled = on || getAutoplay(); }
+    function waitForStep() { return new Promise(r => { window._resolveStep = r; }); }
+    function step() { return getAutoplay() ? new Promise(r => setTimeout(r, STEP)) : waitForStep(); }
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function showPseudo(lines, active, msg) { document.getElementById('log').innerHTML = (lines && lines.length ? lines.map((l,i) => '<span class="pseudo-line' + (i===active?' active':'') + '">' + esc(l) + '</span>').join('') : '') + (msg ? '<span class="message">' + esc(msg) + '</span>' : ''); }
+    function render(movingDisk) {
+      const el = document.getElementById('towers');
+      el.innerHTML = '';
+      ['A', 'B', 'C'].forEach((name, i) => {
+        const t = document.createElement('div');
+        t.className = 'tower';
+        t.innerHTML = '<div class="peg"></div>';
+        const peg = t.querySelector('.peg');
+        (towers[i].slice().reverse()).forEach((size, j) => {
+          const d = document.createElement('div');
+          d.className = 'disk' + (movingDisk === size ? ' moving' : '');
+          d.style.width = (30 + size * 18) + 'px';
+          d.style.background = colors[size - 1] || '#7aa2f7';
+          d.textContent = size;
+          t.insertBefore(d, peg);
+        });
+        const label = document.createElement('div');
+        label.style.marginTop = '8px'; label.style.color = '#565f89'; label.textContent = name;
+        t.appendChild(label);
+        el.appendChild(t);
+      });
+    }
+    const P = ['// Hanoi(n, from, to, aux)', 'if n == 0: return', 'hanoi(n-1, from, aux, to)   // move n-1 to aux', 'move disk n from → to', 'hanoi(n-1, aux, to, from)   // move n-1 to to'];
+    async function hanoi(n, from, to, aux) {
+      if (n === 0) return;
+      showPseudo(P, 1, 'hanoi(' + n + ', ' + from + ', ' + to + ', ' + aux + '). n > 0.');
+      render(n);
+      await step();
+      showPseudo(P, 2, 'hanoi(' + (n - 1) + ', ' + from + ', ' + aux + ', ' + to + ') — move top ' + (n - 1) + ' to ' + aux + '.');
+      await step();
+      await hanoi(n - 1, from, aux, to);
+      const disk = towers[from].pop();
+      showPseudo(P, 3, 'Move disk ' + disk + ' from ' + from + ' to ' + to + '.');
+      render(disk);
+      await step();
+      towers[to].push(disk);
+      render();
+      await step();
+      showPseudo(P, 4, 'hanoi(' + (n - 1) + ', ' + aux + ', ' + to + ', ' + from + ') — move top ' + (n - 1) + ' to ' + to + '.');
+      await step();
+      await hanoi(n - 1, aux, to, from);
+    }
+    async function run() {
+      const n = Math.min(6, Math.max(1, parseInt(document.getElementById('n').value, 10) || 3));
+      setBtns(false);
+      towers = []; for (let i = 0; i < n; i++) towers[0].push(n - i); towers[1] = []; towers[2] = [];
+      showPseudo(P, 0, 'Tower of Hanoi: move ' + n + ' disks from A to C using B.'); render();
+      await step();
+      await hanoi(n, 0, 2, 1);
+      showPseudo([], -1, 'Done. ' + (Math.pow(2, n) - 1) + ' moves.');
+      setBtns(true);
+    }
+    document.getElementById('modeAutoplay').addEventListener('change', function() { if (document.getElementById('btnNextStep')) document.getElementById('btnNextStep').disabled = true; });
+    document.getElementById('modeStep').addEventListener('change', function() { if (animating) document.getElementById('btnNextStep').disabled = false; });
+    document.getElementById('btnNextStep').addEventListener('click', function() { if (window._resolveStep) { window._resolveStep(); window._resolveStep = null; } });
+    towers = [[3, 2, 1], [], []]; render();
+  </script>
+</body>
+</html>

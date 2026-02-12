@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Heap (binary min-heap) — Visualization</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #1a1b26; color: #c0caf5; padding: 2rem; }
+    h1 { color: #7aa2f7; } .subtitle { color: #565f89; margin-bottom: 1rem; }
+    .controls { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem; align-items: center; }
+    input, button { padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid #414868; background: #24283b; color: #c0caf5; font-size: 1rem; }
+    button { cursor: pointer; background: #7aa2f7; color: #1a1b26; border: none; font-weight: 600; }
+    button:hover:not(:disabled) { background: #89b4fa; } button:disabled { opacity: 0.6; }
+    button.danger { background: #f7768e; }
+    #log { background: #24283b; border-radius: 8px; padding: 1rem; min-height: 90px; margin-bottom: 1rem; border-left: 4px solid #7aa2f7; font-family: Consolas, monospace; white-space: pre-wrap; }
+    #log .pseudo-line { display: block; padding: 2px 6px; margin: 2px 0; border-radius: 4px; }
+    #log .pseudo-line.active { background: #364a7c; color: #7dcfff; }
+    #log .pseudo-line.active::before { content: '▶ '; color: #9ece6a; }
+    #log .message { margin-top: 8px; padding-top: 8px; border-top: 1px solid #414868; color: #a9b1d6; }
+    .viz { padding: 1rem; background: #24283b; border-radius: 12px; }
+    .array-wrap { margin-bottom: 1rem; }
+    .array-wrap .cell { display: inline-flex; flex-direction: column; align-items: center; width: 44px; padding: 0.4rem; margin: 0 2px; background: #414868; border-radius: 8px; border: 2px solid #565f89; font-weight: 700; color: #7dcfff; transition: all 0.2s; }
+    .array-wrap .cell.current { border-color: #7dcfff; box-shadow: 0 0 12px rgba(125,207,255,0.5); background: #364a7c; }
+    .array-wrap .cell.swap { border-color: #9ece6a; }
+    .array-wrap .idx { font-size: 0.65rem; color: #565f89; }
+    .tree-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .tree-row { display: flex; gap: 1.5rem; justify-content: center; }
+    .tree-cell { width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; background: #414868; border-radius: 8px; border: 2px solid #565f89; font-weight: 700; color: #7dcfff; }
+    .tree-cell.current { border-color: #7dcfff; background: #364a7c; }
+  </style>
+</head>
+<body>
+  <h1>Binary min-heap</h1>
+  <p class="subtitle">Step-by-step: current index highlighted and pseudocode shown for each step.</p>
+  <div class="controls">
+    <input type="text" id="val" placeholder="Value" style="width:80px">
+    <button onclick="insert()">Insert</button>
+    <button onclick="extractMin()">Extract min</button>
+    <button class="danger" id="btnClear" onclick="clearHeap()">Clear</button>
+  </div>
+  <div class="controls">
+    <span style="color:#565f89">Random:</span>
+    <input type="number" id="rndSize" min="1" max="15" value="6" style="width:50px">
+    <button onclick="randomHeap()">Generate</button>
+  </div>
+  <div class="controls" style="border-top:1px solid #414868;padding-top:0.75rem;margin-top:0.25rem;">
+    <span style="color:#565f89">Playback:</span>
+    <label style="display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer"><input type="radio" name="playback" id="modeAutoplay" checked> Autoplay</label>
+    <label style="display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer"><input type="radio" name="playback" id="modeStep"> Step by step</label>
+    <button type="button" id="btnNextStep" disabled style="margin-left:0.5rem">Next step</button>
+  </div>
+  <div id="log">Operations and pseudocode appear here.</div>
+  <div class="viz" id="viz"></div>
+
+  <script>
+    let heap = [];
+    const STEP = 1000;
+    let animating = false;
+    function getAutoplay() { return document.getElementById('modeAutoplay').checked; }
+    function setBtns(on) { animating = !on; document.querySelectorAll('.controls button:not(#btnClear):not(#btnNextStep)').forEach(b => { b.disabled = !on; }); const nb = document.getElementById('btnNextStep'); if (nb) nb.disabled = on || getAutoplay(); }
+    function waitForStep() { return new Promise(r => { window._resolveStep = r; }); }
+    function step() { return getAutoplay() ? new Promise(r => setTimeout(r, STEP)) : waitForStep(); }
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+    document.getElementById('modeAutoplay').addEventListener('change', function() { if (document.getElementById('btnNextStep')) document.getElementById('btnNextStep').disabled = true; });
+    document.getElementById('modeStep').addEventListener('change', function() { if (animating) document.getElementById('btnNextStep').disabled = false; });
+    document.getElementById('btnNextStep').addEventListener('click', function() { if (window._resolveStep) { window._resolveStep(); window._resolveStep = null; } });
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function showPseudo(lines, active, msg) {
+      document.getElementById('log').innerHTML = (lines && lines.length ? lines.map((l,i) => '<span class="pseudo-line' + (i===active?' active':'') + '">' + esc(l) + '</span>').join('') : '') + (msg ? '<span class="message">' + esc(msg) + '</span>' : '');
+    }
+    function parent(i) { return (i - 1) >> 1; }
+    function left(i) { return 2 * i + 1; }
+    function right(i) { return 2 * i + 2; }
+    function render(highlightIdx = -1, swapIdx = -1) {
+      const v = document.getElementById('viz');
+      v.innerHTML = '';
+      const arrDiv = document.createElement('div');
+      arrDiv.className = 'array-wrap';
+      arrDiv.appendChild(document.createTextNode('Array: '));
+      heap.forEach((x, i) => {
+        const c = document.createElement('span');
+        c.className = 'cell';
+        if (i === highlightIdx) c.classList.add('current');
+        if (i === swapIdx) c.classList.add('swap');
+        c.innerHTML = '<span class="idx">' + i + '</span>' + x;
+        arrDiv.appendChild(c);
+      });
+      v.appendChild(arrDiv);
+      if (heap.length === 0) return;
+      const rows = [];
+      let idx = 0;
+      for (let w = 1; idx < heap.length; w *= 2) {
+        const row = [];
+        for (let j = 0; j < w && idx < heap.length; j++) row.push(heap[idx++]);
+        rows.push(row);
+      }
+      const treeDiv = document.createElement('div');
+      treeDiv.className = 'tree-wrap';
+      treeDiv.appendChild(document.createTextNode('Tree view:'));
+      rows.forEach(r => {
+        const rowEl = document.createElement('div');
+        rowEl.className = 'tree-row';
+        const base = rows.slice(0, -1).reduce((a, rr) => a + rr.length, 0);
+        r.forEach((x, j) => {
+          const cell = document.createElement('span');
+          cell.className = 'tree-cell';
+          const i = base + j;
+          if (i === highlightIdx) cell.classList.add('current');
+          cell.textContent = x;
+          rowEl.appendChild(cell);
+        });
+        treeDiv.appendChild(rowEl);
+      });
+      v.appendChild(treeDiv);
+    }
+    const P_INSERT = [
+      '// Insert — add at end then bubble up to restore heap, O(log n)',
+      'heap.append(value)   // add at index length',
+      'i = length - 1',
+      'while i > 0 and heap[parent(i)] > heap[i]:',
+      '  swap heap[i] and heap[parent(i)]',
+      '  i = parent(i)',
+      '// heap property restored'
+    ];
+    async function insert() {
+      const val = document.getElementById('val').value.trim();
+      if (!val) { showPseudo([], -1, 'Enter a value.'); return; }
+      const v = isNaN(Number(val)) ? val : Number(val);
+      document.getElementById('val').value = '';
+      setBtns(false);
+      showPseudo(P_INSERT, 0, 'Insert ' + v + ': append then bubble up.'); render();
+      await step();
+      showPseudo(P_INSERT, 1, 'heap.append(' + v + ')'); render();
+      await step();
+      let i = heap.length;
+      heap.push(v);
+      showPseudo(P_INSERT, 2, 'i = ' + i + ' (new index).'); render(i);
+      await step();
+      while (i > 0) {
+        const p = parent(i);
+        showPseudo(P_INSERT, 3, 'i > 0? parent(' + i + ') = ' + p + '. heap[parent] > heap[i]?'); render(i, p);
+        await step();
+        if (heap[p] <= heap[i]) { showPseudo(P_INSERT, 6, 'Parent ≤ node → stop. Heap OK.'); break; }
+        showPseudo(P_INSERT, 4, 'Swap heap[' + i + ']=' + heap[i] + ' and heap[' + p + ']=' + heap[p]);
+        [heap[p], heap[i]] = [heap[i], heap[p]];
+        i = p;
+        showPseudo(P_INSERT, 5, 'i = parent(i) = ' + i); render(i);
+        await step();
+      }
+      if (i === 0) showPseudo(P_INSERT, 6, 'Heap property restored.');
+      render(); setBtns(true);
+    }
+    const P_EXTRACT = [
+      '// Extract min — return root, replace with last, bubble down, O(log n)',
+      'if heap empty: return null',
+      'min = heap[0]',
+      'heap[0] = heap.pop()   // last moves to root',
+      'i = 0',
+      'while smaller child exists and heap[i] > that child:',
+      '  swap heap[i] with smaller child',
+      '  i = smaller child index',
+      'return min'
+    ];
+    async function extractMin() {
+      setBtns(false);
+      if (heap.length === 0) { showPseudo(P_EXTRACT, 0, 'Heap empty → return null.'); setBtns(true); return; }
+      showPseudo(P_EXTRACT, 0, 'Heap not empty.'); showPseudo(P_EXTRACT, 1, 'min = heap[0] = ' + heap[0]); render(0);
+      await step();
+      const min = heap[0];
+      showPseudo(P_EXTRACT, 2, 'heap[0] = heap.pop() — move last to root.'); heap[0] = heap.pop();
+      render(0);
+      await step();
+      showPseudo(P_EXTRACT, 3, 'i = 0. Bubble down from root.'); await step();
+      let i = 0;
+      while (true) {
+        const l = left(i), r = right(i);
+        let small = i;
+        if (l < heap.length && heap[l] < heap[small]) small = l;
+        if (r < heap.length && heap[r] < heap[small]) small = r;
+        showPseudo(P_EXTRACT, 4, 'Smaller child of ' + i + '? left=' + (l < heap.length ? heap[l] : '—') + ', right=' + (r < heap.length ? heap[r] : '—') + ' → small=' + small); render(i, small);
+        await step();
+        if (small === i) { showPseudo(P_EXTRACT, 7, 'No smaller child → done. return ' + min); break; }
+        showPseudo(P_EXTRACT, 5, 'Swap heap[' + i + ']=' + heap[i] + ' with heap[' + small + ']=' + heap[small]);
+        [heap[i], heap[small]] = [heap[small], heap[i]];
+        i = small;
+        showPseudo(P_EXTRACT, 6, 'i = ' + i); render(i);
+        await step();
+      }
+      render(); setBtns(true);
+    }
+    function clearHeap() { heap = []; render(); showPseudo([], -1, 'Heap cleared.'); }
+    function randomHeap() {
+      const n = Math.min(15, Math.max(1, parseInt(document.getElementById('rndSize').value, 10) || 6));
+      heap = [];
+      for (let i = 0; i < n; i++) {
+        heap.push(Math.floor(Math.random() * 99) + 1);
+        let j = heap.length - 1;
+        while (j > 0 && heap[parent(j)] > heap[j]) {
+          [heap[parent(j)], heap[j]] = [heap[j], heap[parent(j)]];
+          j = parent(j);
+        }
+      }
+      render(); showPseudo([], -1, 'Random min-heap of ' + n + ' elements.');
+    }
+    render();
+  </script>
+</body>
+</html>

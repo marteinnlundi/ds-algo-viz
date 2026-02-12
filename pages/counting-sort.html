@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Counting sort — Visualization</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #1a1b26; color: #c0caf5; padding: 2rem; }
+    h1 { color: #7aa2f7; } .subtitle { color: #565f89; margin-bottom: 1rem; }
+    .controls { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem; align-items: center; }
+    input, button { padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid #414868; background: #24283b; color: #c0caf5; font-size: 1rem; }
+    button { cursor: pointer; background: #7aa2f7; color: #1a1b26; border: none; font-weight: 600; }
+    button:hover:not(:disabled) { background: #89b4fa; } button:disabled { opacity: 0.6; }
+    button.danger { background: #f7768e; }
+    #log { background: #24283b; border-radius: 8px; padding: 1rem; min-height: 90px; margin-bottom: 1rem; border-left: 4px solid #7aa2f7; font-family: Consolas, monospace; white-space: pre-wrap; }
+    #log .pseudo-line { display: block; padding: 2px 6px; margin: 2px 0; border-radius: 4px; }
+    #log .pseudo-line.active { background: #364a7c; color: #7dcfff; }
+    #log .pseudo-line.active::before { content: '▶ '; color: #9ece6a; }
+    #log .message { margin-top: 8px; padding-top: 8px; border-top: 1px solid #414868; color: #a9b1d6; }
+    .viz { padding: 1rem; background: #24283b; border-radius: 12px; min-height: 100px; }
+    .row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+    .cell { width: 44px; height: 38px; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; background: #414868; border-radius: 8px; border: 2px solid #565f89; font-weight: 700; color: #7dcfff; font-size: 0.85rem; }
+    .cell.current { border-color: #7dcfff; box-shadow: 0 0 12px rgba(125,207,255,0.6); background: #364a7c; }
+    .label { background: #9ece6a; color: #1a1b26; padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.75rem; font-weight: 700; margin-right: 0.5rem; }
+  </style>
+</head>
+<body>
+  <h1>Counting sort</h1>
+  <p class="subtitle">Step-by-step: count frequencies, prefix sum, place elements. O(n + k). Integer keys in range [0, k].</p>
+  <div class="controls">
+    <button onclick="sort()">Sort</button>
+    <button class="danger" id="btnClear" onclick="clearAll()">Clear</button>
+  </div>
+  <div class="controls">
+    <span style="color:#565f89">Size:</span>
+    <input type="number" id="rndSize" min="2" max="12" value="8" style="width:55px">
+    <span style="color:#565f89">Max value (k):</span>
+    <input type="number" id="maxVal" min="2" max="20" value="10" style="width:55px">
+    <button onclick="randomArr()">Generate array</button>
+  </div>
+  <div class="controls" style="border-top:1px solid #414868;padding-top:0.75rem;margin-top:0.25rem;">
+    <span style="color:#565f89">Playback:</span>
+    <label style="display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer"><input type="radio" name="playback" id="modeAutoplay" checked> Autoplay</label>
+    <label style="display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer"><input type="radio" name="playback" id="modeStep"> Step by step</label>
+    <button type="button" id="btnNextStep" disabled style="margin-left:0.5rem">Next step</button>
+  </div>
+  <div id="log">Operations and pseudocode appear here.</div>
+  <div class="viz" id="viz"></div>
+
+  <script>
+    let arr = [];
+    let count = [];
+    const STEP = 900;
+    let animating = false;
+    function getAutoplay() { return document.getElementById('modeAutoplay').checked; }
+    function setBtns(on) { animating = !on; document.querySelectorAll('.controls button:not(#btnClear):not(#btnNextStep)').forEach(b => { b.disabled = !on; }); const nb = document.getElementById('btnNextStep'); if (nb) nb.disabled = on || getAutoplay(); }
+    function waitForStep() { return new Promise(r => { window._resolveStep = r; }); }
+    function step() { return getAutoplay() ? new Promise(r => setTimeout(r, STEP)) : waitForStep(); }
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function showPseudo(lines, active, msg) { document.getElementById('log').innerHTML = (lines && lines.length ? lines.map((l,i) => '<span class="pseudo-line' + (i===active?' active':'') + '">' + esc(l) + '</span>').join('') : '') + (msg ? '<span class="message">' + esc(msg) + '</span>' : ''); }
+    function render(arrHighlight, countHighlight) {
+      const v = document.getElementById('viz'); v.innerHTML = '';
+      const r1 = document.createElement('div'); r1.className = 'row';
+      r1.appendChild(Object.assign(document.createElement('span'), { className: 'label', textContent: 'arr' }));
+      arr.forEach((x, i) => {
+        const c = document.createElement('div');
+        c.className = 'cell' + (arrHighlight === i ? ' current' : ''); c.textContent = x; r1.appendChild(c);
+      });
+      v.appendChild(r1);
+      if (count.length) {
+        const r2 = document.createElement('div'); r2.className = 'row';
+        r2.appendChild(Object.assign(document.createElement('span'), { className: 'label', textContent: 'count' }));
+        count.forEach((x, i) => {
+          const c = document.createElement('div');
+          c.className = 'cell' + (countHighlight === i ? ' current' : ''); c.textContent = x; c.title = 'count[' + i + ']'; r2.appendChild(c);
+        });
+        v.appendChild(r2);
+      }
+      if (!arr.length) v.appendChild(document.createTextNode('(empty)'));
+    }
+    const P = ['// Counting sort — O(n + k), k = max value + 1', 'count[0..k] = 0', 'for i = 0 to n-1: count[arr[i]]++', 'for i = 1 to k: count[i] += count[i-1]  // prefix sum', 'for i = n-1 down to 0: place arr[i] at count[arr[i]]-1; count[arr[i]]--'];
+    async function sort() {
+      if (arr.length < 2) { showPseudo([], -1, 'Generate array first.'); return; }
+      const k = Math.max(...arr) + 1;
+      count = Array(k).fill(0);
+      setBtns(false);
+      showPseudo(P, 0, 'Counting sort (integer keys in range 0..' + (k - 1) + ').'); render(-1, -1);
+      await step();
+      showPseudo(P, 1, 'count[0..' + (k - 1) + '] = 0'); render(-1, -1);
+      await step();
+      for (let i = 0; i < arr.length; i++) {
+        showPseudo(P, 2, 'arr[' + i + '] = ' + arr[i] + ' → count[' + arr[i] + ']++'); count[arr[i]]++;
+        render(i, arr[i]);
+        await step();
+      }
+      showPseudo(P, 3, 'Prefix sum: count[i] += count[i-1]');
+      for (let i = 1; i < k; i++) {
+        count[i] += count[i - 1];
+        render(-1, i); await step();
+      }
+      const out = [...arr];
+      for (let i = arr.length - 1; i >= 0; i--) {
+        const val = out[i];
+        const pos = count[val] - 1;
+        count[val]--;
+        arr[pos] = val;
+        showPseudo(P, 4, 'Place ' + val + ' at index ' + pos + '.'); render(pos, val);
+        await step();
+      }
+      showPseudo([], -1, 'Done. Array sorted.'); render(-1, -1);
+      setBtns(true);
+    }
+    function clearAll() { arr = []; count = []; render(); showPseudo([], -1, 'Cleared.'); }
+    function randomArr() {
+      const n = Math.min(12, Math.max(2, parseInt(document.getElementById('rndSize').value, 10) || 8));
+      const k = Math.min(20, Math.max(2, parseInt(document.getElementById('maxVal').value, 10) || 10));
+      arr = []; for (let i = 0; i < n; i++) arr.push(Math.floor(Math.random() * (k + 1)));
+      count = []; render(); showPseudo([], -1, 'Array of ' + n + ' elements, values 0..' + k + '.');
+    }
+    document.getElementById('modeAutoplay').addEventListener('change', function() { if (document.getElementById('btnNextStep')) document.getElementById('btnNextStep').disabled = true; });
+    document.getElementById('modeStep').addEventListener('change', function() { if (animating) document.getElementById('btnNextStep').disabled = false; });
+    document.getElementById('btnNextStep').addEventListener('click', function() { if (window._resolveStep) { window._resolveStep(); window._resolveStep = null; } });
+    render();
+  </script>
+</body>
+</html>

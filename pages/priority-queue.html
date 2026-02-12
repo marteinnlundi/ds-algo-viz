@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Priority queue — Visualization</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #1a1b26; color: #c0caf5; padding: 2rem; }
+    h1 { color: #7aa2f7; } .subtitle { color: #565f89; margin-bottom: 1rem; }
+    .controls { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem; align-items: center; }
+    input, button { padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid #414868; background: #24283b; color: #c0caf5; font-size: 1rem; }
+    button { cursor: pointer; background: #7aa2f7; color: #1a1b26; border: none; font-weight: 600; }
+    button:hover:not(:disabled) { background: #89b4fa; } button:disabled { opacity: 0.6; }
+    button.danger { background: #f7768e; }
+    #log { background: #24283b; border-radius: 8px; padding: 1rem; min-height: 90px; margin-bottom: 1rem; border-left: 4px solid #7aa2f7; font-family: Consolas, monospace; white-space: pre-wrap; }
+    #log .pseudo-line { display: block; padding: 2px 6px; margin: 2px 0; border-radius: 4px; }
+    #log .pseudo-line.active { background: #364a7c; color: #7dcfff; }
+    #log .pseudo-line.active::before { content: '▶ '; color: #9ece6a; }
+    #log .message { margin-top: 8px; padding-top: 8px; border-top: 1px solid #414868; color: #a9b1d6; }
+    .viz { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; min-height: 80px; padding: 1rem; background: #24283b; border-radius: 12px; }
+    .item { display: inline-flex; flex-direction: column; align-items: center; padding: 0.4rem 0.75rem; background: #414868; border-radius: 8px; border: 2px solid #565f89; font-size: 0.9rem; transition: all 0.2s; }
+    .item .val { color: #7dcfff; font-weight: 700; }
+    .item .pri { color: #565f89; font-size: 0.75rem; }
+    .item.min { border-color: #9ece6a; box-shadow: 0 0 12px rgba(158,206,106,0.5); }
+    .item.new { border-color: #9ece6a; }
+    .label { background: #9ece6a; color: #1a1b26; padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.8rem; font-weight: 700; margin-right: 0.5rem; }
+  </style>
+</head>
+<body>
+  <h1>Priority queue</h1>
+  <p class="subtitle">Step-by-step: current element highlighted and pseudocode shown for each step.</p>
+  <div class="controls">
+    <input type="text" id="val" placeholder="Value" style="width:80px">
+    <input type="number" id="pri" placeholder="Priority" style="width:80px" title="Lower = higher priority">
+    <button onclick="insert()">Insert</button>
+    <button onclick="removeMin()">Remove min</button>
+    <button class="danger" id="btnClear" onclick="clearPQ()">Clear</button>
+  </div>
+  <div class="controls">
+    <span style="color:#565f89">Random:</span>
+    <input type="number" id="rndSize" min="1" max="10" value="5" style="width:50px">
+    <button onclick="randomPQ()">Generate</button>
+  </div>
+  <div class="controls" style="border-top:1px solid #414868;padding-top:0.75rem;margin-top:0.25rem;">
+    <span style="color:#565f89">Playback:</span>
+    <label style="display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer"><input type="radio" name="playback" id="modeAutoplay" checked> Autoplay</label>
+    <label style="display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer"><input type="radio" name="playback" id="modeStep"> Step by step</label>
+    <button type="button" id="btnNextStep" disabled style="margin-left:0.5rem">Next step</button>
+  </div>
+  <div id="log">Operations and pseudocode appear here.</div>
+  <div class="viz" id="viz"></div>
+
+  <script>
+    let pq = [];
+    const STEP = 1000;
+    let animating = false;
+    function getAutoplay() { return document.getElementById('modeAutoplay').checked; }
+    function setBtns(on) { animating = !on; document.querySelectorAll('.controls button:not(#btnClear):not(#btnNextStep)').forEach(b => { b.disabled = !on; }); const nb = document.getElementById('btnNextStep'); if (nb) nb.disabled = on || getAutoplay(); }
+    function waitForStep() { return new Promise(r => { window._resolveStep = r; }); }
+    function step() { return getAutoplay() ? new Promise(r => setTimeout(r, STEP)) : waitForStep(); }
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+    document.getElementById('modeAutoplay').addEventListener('change', function() { if (document.getElementById('btnNextStep')) document.getElementById('btnNextStep').disabled = true; });
+    document.getElementById('modeStep').addEventListener('change', function() { if (animating) document.getElementById('btnNextStep').disabled = false; });
+    document.getElementById('btnNextStep').addEventListener('click', function() { if (window._resolveStep) { window._resolveStep(); window._resolveStep = null; } });
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function showPseudo(lines, active, msg) {
+      document.getElementById('log').innerHTML = (lines && lines.length ? lines.map((l,i) => '<span class="pseudo-line' + (i===active?' active':'') + '">' + esc(l) + '</span>').join('') : '') + (msg ? '<span class="message">' + esc(msg) + '</span>' : '');
+    }
+    function findMinIndex() {
+      if (pq.length === 0) return -1;
+      let best = 0;
+      for (let i = 1; i < pq.length; i++) if (pq[i].priority < pq[best].priority) best = i;
+      return best;
+    }
+    function render(highlightMin = false, newIdx = -1) {
+      const v = document.getElementById('viz');
+      v.innerHTML = '<span class="label">pq</span>';
+      const minI = findMinIndex();
+      pq.forEach((x, i) => {
+        const el = document.createElement('span');
+        el.className = 'item';
+        if (highlightMin && i === minI) el.classList.add('min');
+        if (newIdx >= 0 && i === newIdx) el.classList.add('new');
+        el.innerHTML = '<span class="val">' + esc(String(x.value)) + '</span><span class="pri">p=' + x.priority + '</span>';
+        v.appendChild(el);
+      });
+      if (pq.length === 0) v.appendChild(document.createTextNode('(empty)'));
+    }
+    const P_INSERT = [
+      '// Insert — append (unordered list), O(1); min found on remove',
+      'pq.append((value, priority))',
+      '// min is not updated until next removeMin'
+    ];
+    async function insert() {
+      const val = document.getElementById('val').value.trim();
+      const p = parseInt(document.getElementById('pri').value, 10);
+      if (!val) { showPseudo([], -1, 'Enter value and priority.'); return; }
+      const priority = isNaN(p) ? 0 : p;
+      document.getElementById('val').value = ''; document.getElementById('pri').value = '';
+      setBtns(false);
+      showPseudo(P_INSERT, 0, 'Insert (' + val + ', priority=' + priority + ').'); render();
+      await step();
+      showPseudo(P_INSERT, 1, 'pq.append((' + val + ', ' + priority + '))'); render();
+      await step();
+      pq.push({ value: val, priority });
+      showPseudo(P_INSERT, 2, 'Inserted. Size = ' + pq.length + '.'); render(false, pq.length - 1);
+      setBtns(true);
+    }
+    const P_REMOVE = [
+      '// Remove min — linear scan for min priority, then remove, O(n)',
+      'if pq is empty: return null',
+      'min_index = 0',
+      'for i = 1 to length-1: if pq[i].priority < pq[min_index].priority: min_index = i',
+      'item = pq[min_index]; remove pq[min_index]',
+      'return item'
+    ];
+    async function removeMin() {
+      setBtns(false);
+      showPseudo(P_REMOVE, 0, 'Remove min: get element with smallest priority.'); render(true);
+      await step();
+      if (pq.length === 0) { showPseudo(P_REMOVE, 0, 'Queue empty → return null.'); setBtns(true); return; }
+      showPseudo(P_REMOVE, 1, 'min_index = 0. Scan for smaller priority.'); render(true);
+      await step();
+      let minI = 0;
+      for (let i = 1; i < pq.length; i++) {
+        showPseudo(P_REMOVE, 2, 'i=' + i + ': pq[' + i + '].priority=' + pq[i].priority + ' < pq[' + minI + '].priority=' + pq[minI].priority + '?'); render(true);
+        await step();
+        if (pq[i].priority < pq[minI].priority) { minI = i; showPseudo(P_REMOVE, 2, 'Yes → min_index = ' + i); await step(); }
+      }
+      showPseudo(P_REMOVE, 3, 'item = pq[' + minI + '] = (' + pq[minI].value + ', p=' + pq[minI].priority + '); remove it.'); render(true);
+      await step();
+      const x = pq.splice(minI, 1)[0];
+      showPseudo(P_REMOVE, 4, 'return (' + x.value + ', p=' + x.priority + ')'); render();
+      setBtns(true);
+    }
+    function clearPQ() { pq = []; render(); showPseudo([], -1, 'Priority queue cleared.'); }
+    function randomPQ() {
+      const n = Math.min(10, Math.max(1, parseInt(document.getElementById('rndSize').value, 10) || 5));
+      pq = []; for (let i = 0; i < n; i++) pq.push({ value: 'v' + (i + 1), priority: Math.floor(Math.random() * 20) });
+      render(true); showPseudo([], -1, 'Random priority queue of ' + n + ' (min priority highlighted).');
+    }
+    render();
+  </script>
+</body>
+</html>

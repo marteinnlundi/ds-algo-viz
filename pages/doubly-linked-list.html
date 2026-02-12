@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Doubly linked list — Visualization</title>
+  <link rel="stylesheet" href="../css/common.css">
+  <style>
+    .viz { display: flex; flex-wrap: wrap; align-items: center; gap: 0; min-height: 100px; padding: 1.25rem; background: #24283b; border-radius: 12px; }
+    .list-node {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      background: #24283b; border: 2.5px solid #565f89; border-radius: 10px;
+      padding: 0.5rem 0.75rem; transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .list-node .prev { color: #f7768e; font-size: 0.75rem; }
+    .list-node .val { font-weight: 700; color: #7dcfff; font-size: 1rem; }
+    .list-node .next { color: #7aa2f7; font-size: 0.75rem; }
+    .list-node.current { border-color: #7dcfff; box-shadow: 0 0 14px rgba(125,207,255,0.5); background: #364a7c; }
+    .list-node.new { border-color: #9ece6a; box-shadow: 0 0 8px rgba(158,206,106,0.4); }
+    .list-arrow {
+      display: inline-flex; flex-direction: column; align-items: center; margin: 0 0.5rem;
+      color: #7aa2f7; font-size: 1.25rem; font-weight: 700; line-height: 1;
+    }
+    .list-arrow .arrow-label { font-size: 0.65rem; color: #565f89; margin-top: 2px; }
+    .null-box { padding: 0.45rem 0.65rem; border: 2px dashed #565f89; border-radius: 8px; color: #565f89; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <h1>Doubly linked list</h1>
+  <p class="subtitle">Step-by-step: current node highlighted and pseudocode shown for each step.</p>
+  <div class="controls">
+    <input type="text" id="val" placeholder="Value(s): 1, 2, 3" style="min-width: 180px">
+    <button onclick="insertHead()">Insert at head</button>
+    <button onclick="insertTail()">Insert at tail</button>
+    <button onclick="del()">Delete value</button>
+    <button onclick="search()">Search</button>
+    <button class="danger" id="btnClear" onclick="clearList()">Clear</button>
+  </div>
+  <div class="controls">
+    <span style="color:#565f89">Random size:</span>
+    <input type="number" id="rndSize" min="1" max="20" value="6" style="width:60px">
+    <button onclick="randomList()">Generate</button>
+  </div>
+  <div class="controls playback-row">
+    <span class="playback-label">Playback:</span>
+    <label><input type="radio" name="playback" id="modeAutoplay" checked> Autoplay</label>
+    <label><input type="radio" name="playback" id="modeStep"> Step by step</label>
+    <button type="button" id="btnNextStep" disabled>Next step</button>
+  </div>
+  <div id="log">Operation steps and pseudocode appear here.</div>
+  <div class="viz" id="viz"></div>
+
+  <script>
+    let head = null, tail = null;
+    const STEP = 1000;
+    let animating = false;
+    function getAutoplay() { return document.getElementById('modeAutoplay').checked; }
+    function setBtns(on) { animating = !on; document.querySelectorAll('.controls button:not(#btnClear):not(#btnNextStep)').forEach(b => { b.disabled = !on; }); const nb = document.getElementById('btnNextStep'); if (nb) nb.disabled = on || getAutoplay(); }
+    function waitForStep() { return new Promise(r => { window._resolveStep = r; }); }
+    function step() { return getAutoplay() ? new Promise(r => setTimeout(r, STEP)) : waitForStep(); }
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+    document.getElementById('modeAutoplay').addEventListener('change', function() { if (document.getElementById('btnNextStep')) document.getElementById('btnNextStep').disabled = true; });
+    document.getElementById('modeStep').addEventListener('change', function() { if (animating) document.getElementById('btnNextStep').disabled = false; });
+    document.getElementById('btnNextStep').addEventListener('click', function() { if (window._resolveStep) { window._resolveStep(); window._resolveStep = null; } });
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function showPseudo(lines, active, msg) {
+      const el = document.getElementById('log');
+      const code = (lines && lines.length) ? lines.map((l,i) => '<span class="pseudo-line' + (i===active?' active':'') + '">' + esc(l) + '</span>').join('') : '';
+      el.innerHTML = code + (msg ? '<span class="message">' + esc(msg) + '</span>' : '');
+    }
+    function parseInput() { const s = document.getElementById('val').value.trim(); if (!s) return []; return s.split(/[\s,]+/).map(p => isNaN(Number(p)) ? p : Number(p)); }
+    function render() {
+      const v = document.getElementById('viz');
+      v.innerHTML = '';
+      v.appendChild(Object.assign(document.createElement('span'), { className: 'label', textContent: 'head' }));
+      if (!head) { v.appendChild(Object.assign(document.createElement('span'), { className: 'null-box', textContent: 'null' })); return; }
+      let cur = head, i = 0;
+      while (cur) {
+        const n = document.createElement('span');
+        n.className = 'list-node'; n.dataset.index = i; n.dataset.value = cur.value;
+        n.innerHTML = '<span class="prev">prev</span><span class="val">' + cur.value + '</span><span class="next">next</span>';
+        v.appendChild(n);
+        if (cur.next) {
+          const arr = document.createElement('span');
+          arr.className = 'list-arrow';
+          arr.innerHTML = '→<span class="arrow-label">next</span>';
+          v.appendChild(arr);
+        }
+        cur = cur.next; i++;
+      }
+      v.appendChild(Object.assign(document.createElement('span'), { className: 'null-box', textContent: 'null' }));
+    }
+    function highlightIdx(idx, cls = 'current') {
+      document.querySelectorAll('.list-node').forEach(function (n) { n.classList.remove('current','new'); if (parseInt(n.dataset.index,10) === idx) n.classList.add(cls); });
+    }
+    const P_INSERT_HEAD = ['new.prev = null, new.next = head', 'if head ≠ null: head.prev = new', 'head = new'];
+    async function insertHead() {
+      const vals = parseInput(); if (!vals.length) { showPseudo([], -1, 'Enter value(s).'); return; }
+      if (vals.length > 1) { vals.forEach(v => { const n = { value: v, prev: null, next: head }; if (head) head.prev = n; head = n; if (!tail) tail = n; }); render(); document.getElementById('val').value = ''; return; }
+      setBtns(false);
+      const v = vals[0]; document.getElementById('val').value = '';
+      showPseudo(P_INSERT_HEAD, 0, 'Create node ' + v + ', new.next = head.');
+      render(); await step();
+      if (head) { showPseudo(P_INSERT_HEAD, 1, 'head.prev = new'); highlightIdx(0); await step(); }
+      const newN = { value: v, prev: null, next: head };
+      if (head) head.prev = newN; else tail = newN;
+      head = newN;
+      showPseudo(P_INSERT_HEAD, 2, 'head = new.');
+      render(); highlightIdx(0); var first = document.querySelector('.list-node'); if (first) first.classList.add('new');
+      await step(); setBtns(true);
+    }
+    const P_INSERT_TAIL = ['new.next = null, new.prev = tail', 'if tail ≠ null: tail.next = new', 'tail = new'];
+    async function insertTail() {
+      const vals = parseInput(); if (!vals.length) { showPseudo([], -1, 'Enter value(s).'); return; }
+      if (vals.length > 1) { vals.forEach(v => { const n = { value: v, prev: tail, next: null }; if (tail) tail.next = n; tail = n; if (!head) head = n; }); render(); document.getElementById('val').value = ''; return; }
+      setBtns(false);
+      const v = vals[0]; document.getElementById('val').value = '';
+      const newN = { value: v, prev: tail, next: null };
+      showPseudo(P_INSERT_TAIL, 0, 'Create node ' + v + '.'); render(); await step();
+      if (tail) { showPseudo(P_INSERT_TAIL, 1, 'tail.next = new'); let idx = 0; let c = head; while (c && c !== tail) { c = c.next; idx++; } highlightIdx(idx); await step(); }
+      if (tail) tail.next = newN; else head = newN;
+      tail = newN;
+      showPseudo(P_INSERT_TAIL, 2, 'tail = new.'); render();
+      var nodes = document.querySelectorAll('.list-node'); if (nodes.length) nodes[nodes.length-1].classList.add('new');
+      await step(); setBtns(true);
+    }
+    const P_SEARCH = ['current = head', 'while current ≠ null:', '  if current.value == target: return true', '  current = current.next', 'return false'];
+    async function search() {
+      const vals = parseInput(); if (!vals.length) { showPseudo([], -1, 'Enter a value.'); return; }
+      const target = vals[0]; document.getElementById('val').value = '';
+      if (!head) { showPseudo(P_SEARCH, 0, 'head is null.'); return; }
+      setBtns(false);
+      let cur = head, idx = 0;
+      showPseudo(P_SEARCH, 0, 'current = head'); highlightIdx(0); await step();
+      while (cur) {
+        showPseudo(P_SEARCH, 1, 'current ≠ null, index ' + idx + ', value=' + cur.value); highlightIdx(idx); await step();
+        showPseudo(P_SEARCH, 2, 'current.value == ' + target + '? ' + (cur.value === target ? 'Yes!' : 'No')); await step();
+        if (cur.value === target) { showPseudo(P_SEARCH, 2, 'Found at index ' + idx); setBtns(true); return; }
+        showPseudo(P_SEARCH, 3, 'current = current.next'); cur = cur.next; idx++;
+        if (cur) { highlightIdx(idx); await step(); }
+      }
+      showPseudo(P_SEARCH, 4, 'Not found.'); render(); setBtns(true);
+    }
+    const P_DELETE_HEAD = [
+      '// Delete — case: target is head',
+      'if head is null: return',
+      'if head.value == value:',
+      '  head = head.next',
+      '  if head ≠ null: head.prev = null',
+      '  else: tail = null',
+      '  return'
+    ];
+    const P_DELETE_WALK = [
+      '// Delete — walk and unlink',
+      'current = head.next   // already checked head',
+      'while current ≠ null:',
+      '  if current.value == value:',
+      '    current.prev.next = current.next   // bypass current',
+      '    if current.next ≠ null: current.next.prev = current.prev',
+      '    else: tail = current.prev',
+      '    return',
+      '  current = current.next',
+      '// value not found'
+    ];
+    async function del() {
+      const vals = parseInput(); if (!vals.length) { showPseudo([], -1, 'Enter value to delete.'); return; }
+      const target = vals[0]; document.getElementById('val').value = '';
+      if (!head) { showPseudo(P_DELETE_HEAD, 0, 'List empty.'); return; }
+      setBtns(false);
+      if (head.value === target) {
+        showPseudo(P_DELETE_HEAD, 1, 'head is not null.'); await step();
+        showPseudo(P_DELETE_HEAD, 2, 'head.value == ' + target + '? Yes.'); highlightIdx(0); await step();
+        showPseudo(P_DELETE_HEAD, 3, 'head = head.next'); await step();
+        showPseudo(P_DELETE_HEAD, 4, head.next ? 'head.prev = null' : 'head is null → tail = null'); await step();
+        head = head.next; if (head) head.prev = null; else tail = null;
+        render(); setBtns(true); return;
+      }
+      showPseudo(P_DELETE_WALK, 0, 'Target not at head. current = head.next (index 1).'); highlightIdx(1); await step();
+      let cur = head.next, idx = 1;
+      while (cur) {
+        showPseudo(P_DELETE_WALK, 1, 'while current ≠ null. At index ' + idx + ', value=' + cur.value); highlightIdx(idx); await step();
+        showPseudo(P_DELETE_WALK, 2, 'current.value == ' + target + '? ' + (cur.value === target ? 'Yes!' : 'No.')); await step();
+        if (cur.value === target) {
+          showPseudo(P_DELETE_WALK, 3, 'current.prev.next = current.next'); highlightIdx(idx); await step();
+          showPseudo(P_DELETE_WALK, 4, cur.next ? 'current.next.prev = current.prev' : 'current is tail → tail = current.prev'); await step();
+          cur.prev.next = cur.next; if (cur.next) cur.next.prev = cur.prev; else tail = cur.prev;
+          render(); setBtns(true); return;
+        }
+        showPseudo(P_DELETE_WALK, 5, 'current = current.next'); cur = cur.next; idx++;
+        if (cur) { highlightIdx(idx); await step(); }
+      }
+      showPseudo(P_DELETE_WALK, 6, 'Value ' + target + ' not found.'); render(); setBtns(true);
+    }
+    function clearList() { head = null; tail = null; render(); showPseudo([], -1, 'List cleared.'); }
+    function randomList() {
+      const n = Math.min(30, Math.max(1, parseInt(document.getElementById('rndSize').value, 10) || 5));
+      head = null; tail = null;
+      for (let i = 0; i < n; i++) {
+        const v = Math.floor(Math.random() * 99) + 1;
+        const node = { value: v, prev: tail, next: null };
+        if (tail) tail.next = node; else head = node;
+        tail = node;
+      }
+      render(); showPseudo([], -1, 'Random list of ' + n + ' nodes.');
+    }
+    render();
+  </script>
+</body>
+</html>
